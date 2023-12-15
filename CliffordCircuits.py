@@ -128,26 +128,36 @@ class StabilizerState():
         self.state[:, 2*self.N] = vec_r^(xcol_a & zcol_a)
         self.state[:, self.N+a] = xcol_a^zcol_a
         
-    def rand2Clifford(self, a, b):
-        # Applies a random 2-qubit clifford on qubits a and b
-        index_symplectic = random.randint(0, 719)
-        r = np.array([random.randint(0, 1) for j in range(2)])
-        s = np.array([random.randint(0, 1) for j in range(2)])
-        gi = sp.symplectic_n3(2, index_symplectic)
+    def randClifford(self, qubits_list):
+        # Applies a random n-qubit clifford on qubits in qubits_list
+        n = len(qubits_list)
+        if n > self.N:
+            raise RuntimeError("Number of given qubits exceeds N")
+        s = 2**(2*n)-1
+        prod = 1
+        for j in range(1, n+1):
+            prod *= 4**j-1
+        dim_symplectic = 2**(n*n)*prod
+        index_symplectic = random.randint(0, dim_symplectic - 1)
         
-        alpha = np.array([[gi[0,0], gi[2,0]], [gi[0,2], gi[2,2]]], dtype = int)
-        beta = np.array([[gi[1,0], gi[3,0]], [gi[1,2], gi[3,2]]], dtype = int)
-        gamma = np.array([[gi[0,1], gi[2,1]], [gi[0,3], gi[2,3]]], dtype = int)
-        delta = np.array([[gi[1,1], gi[3,1]], [gi[1,3], gi[3,3]]], dtype = int)
+        r = np.array([random.randint(0, 1) for j in range(n)])
+        s = np.array([random.randint(0, 1) for j in range(n)])
+        gi = sp.symplectic_n3(n, index_symplectic)
         
-        x = np.array([self.state[:, i] for i in [a, b]])
-        z = np.array([self.state[:, i+self.N] for i in [a, b]])
+        alpha = np.zeros([n, n], dtype = int)
+        beta = np.zeros([n, n], dtype = int)
+        gamma = np.zeros([n, n], dtype = int)
+        delta = np.zeros([n, n], dtype = int)
         
-        # we introduce two variables: i (which initial qubit) and order_i 
-        # order_i means the position of qubit i in the subspace on which the clifford is acting
-        # e.g. we act con qubit i = 3 and i = 7, then i = 3 is the first (order_i = 0)
-        # and i = 7 is the second (order_i = 1)
-        # this is useful as we need to map the alpha, beta (etc) n by n matrices to the actual qubits
+        for i in range(n):
+            for j in range(n):
+                alpha[i, j] = gi[2*j, 2*i]
+                beta[i, j] = gi[2*j+1, 2*i]
+                gamma[i, j] = gi[2*j, 2*i+1]
+                delta[i, j] = gi[2*j+1, 2*i+1]
+        
+        x = np.array([self.state[:, i] for i in qubits_list])
+        z = np.array([self.state[:, i+self.N] for i in qubits_list])
         
         # update minus sign
         beta_gammaT = np.dot(beta, gamma.T)
@@ -156,9 +166,15 @@ class StabilizerState():
         delta_alphaT = np.dot(delta, alpha.T)
         
         minus_exponent = self.state[:, 2*self.N].copy()
-        proj = np.ones(len([a,b]), dtype=int)
+        proj = np.ones(n, dtype=int)
         
-        for order_i, i in enumerate([a, b]):
+        # we introduce two variables: i (which initial qubit) and order_i 
+        # order_i means the position of qubit i in the subspace on which the clifford is acting
+        # e.g. we act con qubit i = 3 and i = 7, then i = 3 is the first (order_i = 0)
+        # and i = 7 is the second (order_i = 1)
+        # this is useful as we need to map the alpha, beta (etc) n by n matrices to the actual qubits
+        
+        for order_i, i in enumerate(qubits_list):
             
             minus_exponent ^= (r[order_i]&x[order_i] ^ s[order_i]&z[order_i])
             
@@ -175,15 +191,12 @@ class StabilizerState():
             
         
         # update state
-        for order_q, q in enumerate([a,b]):
+        for order_q, q in enumerate(qubits_list):
             
             x_exponent = np.array([(np.dot(x[:, l], alpha[:, order_q]) + np.dot(z[:, l], gamma[:, order_q]))%2 for l in range(2*self.N)])
             z_exponent = np.array([(np.dot(x[:, l], beta[:, order_q]) + np.dot(z[:, l], delta[:, order_q]))%2 for l in range(2*self.N)])
             self.state[:, q] = x_exponent
             self.state[:, q+self.N] = z_exponent
-        
-                
-        
         
     
     def measure(self, a):
@@ -233,13 +246,21 @@ class StabilizerState():
         #plt.savefig('D:/Fisica/TESI/Final results/filename.png')
         plt.show()  
     
+    def randEvolution(self, depth):
+        qubits = [i for i in range(self.N)]
+        for layer in range(depth):
+            random.shuffle(qubits)
+            pairs = [qubits[2*i:2*(i+1)] for i in range(2)]
+            for pair in pairs:
+                self.randClifford(pair)
+    
                    
-N_qubits = 3
+N_qubits = 4
 
 N_shots = 1
 
 clifford_circ = StabilizerState(N_qubits)
-clifford_circ.rand2Clifford(0, 2)
+clifford_circ.randEvolution(20)
 print(clifford_circ.check_matrix)
 print(clifford_circ._is_valid_state(clifford_circ.state))
 
