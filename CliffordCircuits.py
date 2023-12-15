@@ -9,6 +9,7 @@ import numpy as np
 import random
 from collections import Counter
 import matplotlib.pyplot as plt
+import Symplectic as sp
 
 class StabilizerState():
     
@@ -41,6 +42,53 @@ class StabilizerState():
     def _rowsum(self, h, i):
         # given target h and input i, UPDATES IN PLACE h = h+i 
         self._sum_rows(self.state[h], self.state[i])    #update h row as sum of i and h rows
+        
+    def _gauss_elim(self, M):
+
+        m, n = M.shape
+    
+        i=0
+        j=0
+    
+        while i < m and j < n:
+            # find value and index of largest element in remainder of column j
+            k = np.argmax(M[i:, j]) +i
+    
+            # swap rows
+            #M[[k, i]] = M[[i, k]] this doesn't work with numba
+            temp = np.copy(M[k])
+            M[k] = M[i]
+            M[i] = temp
+    
+            aijn = M[i, j:]
+    
+            col = np.copy(M[:, j]) #make a copy otherwise M will be directly affected
+    
+            col[i] = 0 #avoid xoring pivot row with itself
+    
+            flip = np.outer(col, aijn)
+    
+            M[:, j:] = M[:, j:] ^ flip
+    
+            i += 1
+            j +=1
+    
+        return M
+    
+    def _fullrank_X(self):
+        # Applies hadamards to make X matrix have full rank
+        gauss_X = self._gauss_elim(self.state[self.N:2*self.N, 0:self.N].copy())
+        qubits = [i for i in range(self.N) if gauss_X[i,i] == 0]
+        [self.H(a) for a in qubits]
+        
+        return qubits
+    
+    def _is_valid_state(self, state):
+        det = np.linalg.det(state[:, 0:2*self.N])
+        if det == 0:
+            return False
+        else:
+            return True
     
     
     def set_state(self, state):
@@ -80,6 +128,63 @@ class StabilizerState():
         self.state[:, 2*self.N] = vec_r^(xcol_a & zcol_a)
         self.state[:, self.N+a] = xcol_a^zcol_a
         
+    def rand2Clifford(self, a, b):
+        # Applies a random 2-qubit clifford on qubits a and b
+        index_symplectic = random.randint(0, 719)
+        r = np.array([random.randint(0, 1) for j in range(2)])
+        s = np.array([random.randint(0, 1) for j in range(2)])
+        gi = sp.symplectic_n3(2, index_symplectic)
+        
+        alpha = np.array([[gi[0,0], gi[2,0]], [gi[0,2], gi[2,2]]], dtype = int)
+        beta = np.array([[gi[1,0], gi[3,0]], [gi[1,2], gi[3,2]]], dtype = int)
+        gamma = np.array([[gi[0,1], gi[2,1]], [gi[0,3], gi[2,3]]], dtype = int)
+        delta = np.array([[gi[1,1], gi[3,1]], [gi[1,3], gi[3,3]]], dtype = int)
+        
+        x = np.array([self.state[:, i] for i in [a, b]])
+        z = np.array([self.state[:, i+self.N] for i in [a, b]])
+        
+        # we introduce two variables: i (which initial qubit) and order_i 
+        # order_i means the position of qubit i in the subspace on which the clifford is acting
+        # e.g. we act con qubit i = 3 and i = 7, then i = 3 is the first (order_i = 0)
+        # and i = 7 is the second (order_i = 1)
+        # this is useful as we need to map the alpha, beta (etc) n by n matrices to the actual qubits
+        
+        # update minus sign
+        beta_gammaT = np.dot(beta, gamma.T)
+        beta_alphaT = np.dot(beta, alpha.T)
+        delta_gammaT = np.dot(delta, gamma.T)
+        delta_alphaT = np.dot(delta, alpha.T)
+        
+        minus_exponent = self.state[:, 2*self.N].copy()
+        proj = np.ones(len([a,b]), dtype=int)
+        
+        for order_i, i in enumerate([a, b]):
+            
+            minus_exponent ^= (r[order_i]&x[order_i] ^ s[order_i]&z[order_i])
+            
+            B1 = np.array([np.dot(beta_gammaT[order_i], proj & z[:, l]) %2 for l in range(2*self.N)])
+            proj[order_i] = 0
+            B2 = np.array([np.dot(beta_alphaT[order_i], proj & x[:, l])%2 for l in range(2*self.N)])
+            minus_exponent ^= x[order_i]&(B1^B2)
+            
+            D1 = np.array([np.dot(delta_gammaT[order_i], proj & z[:, l])%2 for l in range(2*self.N)])
+            D2 = np.array([np.dot(delta_alphaT[order_i], proj & x[:, l])%2 for l in range(2*self.N)])            
+            minus_exponent ^= z[order_i]&(D1^D2)
+        
+        self.state[:, 2*self.N] = minus_exponent
+            
+        
+        # update state
+        for order_q, q in enumerate([a,b]):
+            
+            x_exponent = np.array([(np.dot(x[:, l], alpha[:, order_q]) + np.dot(z[:, l], gamma[:, order_q]))%2 for l in range(2*self.N)])
+            z_exponent = np.array([(np.dot(x[:, l], beta[:, order_q]) + np.dot(z[:, l], delta[:, order_q]))%2 for l in range(2*self.N)])
+            self.state[:, q] = x_exponent
+            self.state[:, q+self.N] = z_exponent
+        
+                
+        
+        
     
     def measure(self, a):
         xa_positions = np.where(self.state[:, a] == 1)[0]     #save position of all stab and destab that do not commute with Z_a
@@ -87,7 +192,7 @@ class StabilizerState():
         if p >= self.N:      #if any stab does not commute with measure, state needs to be updated
             [self._rowsum(i, p) for i in xa_positions if (i!=p and i!=p-self.N)]      #update all stabilizers that anticommute with meas
             self.state[p-self.N] = self.state[p].copy()          #set (p-n)th row equal to p, moving the non commuting stab to destabs
-            self.state[p] = np.zeros([2*self.N+1])
+            self.state[p] = np.zeros([2*self.N+1])          #set p-th row to all zeros except 1 in position N+a (the current measurement stabilizer)
             self.state[p, self.N+a] = 1
             rp = random.randint(0,1)
             self.state[p, 2*self.N] = rp
@@ -129,21 +234,18 @@ class StabilizerState():
         plt.show()  
     
                    
-N_qubits = 1000
+N_qubits = 3
 
-N_shots = 1000
+N_shots = 1
 
 clifford_circ = StabilizerState(N_qubits)
-clifford_circ.H(0)
-clifford_circ.CNOT(0, 250)
-clifford_circ.H(0)
-clifford_circ.S(0)
-clifford_circ.S(0)
-clifford_circ.H(0)
-counts = clifford_circ.measure_mult_shots([0,250], N_shots)
+clifford_circ.rand2Clifford(0, 2)
+print(clifford_circ.check_matrix)
+print(clifford_circ._is_valid_state(clifford_circ.state))
+
+# counts = clifford_circ.measure_mult_shots([0, 2], N_shots)
 
 
-#counts = clifford_circ.run(my_circuit, [0,1], N_shots)
 
-print("Total counts are:", counts)
-clifford_circ.plot_histogram(counts)
+# print("Total counts are:", counts)
+# clifford_circ.plot_histogram(counts)
