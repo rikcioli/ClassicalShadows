@@ -18,8 +18,8 @@ class StabilizerState():
         self.state = np.eye(2*self.N, 2*self.N+1, 0, dtype=int)
         
     @property
-    def check_matrix(self) -> np.ndarray:
-        """Returns the Clifford state of the system"""
+    def stabilizer_table(self) -> np.ndarray:
+        """Returns the stabilizer table of the system"""
         return self.state
     
     def _sum_rows(self, row_h, row_i):
@@ -40,11 +40,12 @@ class StabilizerState():
         return row_h
 
     def _rowsum(self, h, i):
-        # given target h and input i, UPDATES IN PLACE h = h+i 
-        self._sum_rows(self.state[h], self.state[i])    #update h row as sum of i and h rows
+        # given target h and input i, UPDATES IN PLACE h = h+i         
+        self.state[h] = self._sum_rows(self.state[h], self.state[i])    #update h row as sum of i and h rows
         
     def _gauss_elim(self, M):
 
+        M = M.copy()
         m, n = M.shape
     
         i=0
@@ -55,7 +56,6 @@ class StabilizerState():
             k = np.argmax(M[i:, j]) +i
     
             # swap rows
-            #M[[k, i]] = M[[i, k]] this doesn't work with numba
             temp = np.copy(M[k])
             M[k] = M[i]
             M[i] = temp
@@ -82,8 +82,12 @@ class StabilizerState():
         [self.H(a) for a in qubits]
         
         return qubits
+
     
-    def _is_valid_state(self, state):
+    def _is_valid_state(self, state = None):
+        if state is None:
+            state = self.state
+            
         det = np.linalg.det(state[:, 0:2*self.N])
         if det == 0:
             return False
@@ -133,7 +137,7 @@ class StabilizerState():
         n = len(qubits_list)
         if n > self.N:
             raise RuntimeError("Number of given qubits exceeds N")
-        s = 2**(2*n)-1
+        
         prod = 1
         for j in range(1, n+1):
             prod *= 4**j-1
@@ -203,7 +207,7 @@ class StabilizerState():
         xa_positions = np.where(self.state[:, a] == 1)[0]     #save position of all stab and destab that do not commute with Z_a
         p = xa_positions[-1]
         if p >= self.N:      #if any stab does not commute with measure, state needs to be updated
-            [self._rowsum(i, p) for i in xa_positions if (i!=p and i!=p-self.N)]      #update all stabilizers that anticommute with meas
+            [self._rowsum(i, p) for i in xa_positions if (i!=p and i!=p-self.N)]      #update all stab and destab that anticommute with meas
             self.state[p-self.N] = self.state[p].copy()          #set (p-n)th row equal to p, moving the non commuting stab to destabs
             self.state[p] = np.zeros([2*self.N+1])          #set p-th row to all zeros except 1 in position N+a (the current measurement stabilizer)
             self.state[p, self.N+a] = 1
@@ -217,10 +221,10 @@ class StabilizerState():
             r_extra = extra_row[2*self.N]
             return r_extra
         
-    def measure_mult(self, qubits_list):
+    def multi_measure(self, qubits_list):
         return [self.measure(a) for a in qubits_list]
     
-    def measure_mult_shots(self, qubits_list, n_shots):
+    def measure_multi_shots(self, qubits_list, n_shots):
         current_state = self.state.copy()
         outcomes = []
         for i in range(n_shots):
@@ -250,23 +254,41 @@ class StabilizerState():
         qubits = [i for i in range(self.N)]
         for layer in range(depth):
             random.shuffle(qubits)
-            pairs = [qubits[2*i:2*(i+1)] for i in range(2)]
+            pairs = [qubits[2*i:2*(i+1)] for i in range(len(qubits)//2)]
             for pair in pairs:
                 self.randClifford(pair)
     
+    def dot_zero(self, state = None):
+        # returns overlap with |0> state <0|\psi>
+        if state is None:
+            state = self.state
+        state = self._gauss_elim(state[self.N:])
+        X_matrix = state[:, :self.N]
+        Z_matrix = state[:, self.N:2*self.N]
+        vec_r = state[:, 2*self.N]
+        
+        s = 0
+        for i in range(self.N):
+            if 1 in X_matrix[i, i:]:
+                s += 1
+            elif (vec_r[i] != 0):
+                    return 0
+        return 2**(-s/2)
+    
                    
-N_qubits = 4
+# insert EVEN number of qubits    
+N_qubits = 2
 
 N_shots = 1
 
 clifford_circ = StabilizerState(N_qubits)
 clifford_circ.randEvolution(20)
-print(clifford_circ.check_matrix)
-print(clifford_circ._is_valid_state(clifford_circ.state))
+#clifford_circ.multi_measure([i for i in range(N_qubits)])
+print(clifford_circ.stabilizer_table)
+print("Valid state:", clifford_circ._is_valid_state())
+print("Scalar prod with |0>:", clifford_circ.dot_zero())
 
-# counts = clifford_circ.measure_mult_shots([0, 2], N_shots)
-
-
+# counts = clifford_circ.measure_multi_shots([0, 2], N_shots)
 
 # print("Total counts are:", counts)
 # clifford_circ.plot_histogram(counts)

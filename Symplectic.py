@@ -142,3 +142,5 @@ def symplectic_n3(n, i):
 #         break
 #     else:
 #         Sn.append(g)
+
+# [np.linalg.multi_dot([symp.T, np.array([[0,1,0,0], [1,0,0,0], [0,0,0,1], [0,0,1,0]]), symp])%2 for symp in Sn]
