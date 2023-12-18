@@ -8,13 +8,6 @@ Created on Wed Dec 13 11:15:26 2023
 import numpy as np
 
 
-# s = 2**(2*n)-1
-# prod = 1
-# for j in range(1, n+1):
-#     prod *= 4**j-1
-# dim_symplectic = 2**(n*n)*prod
-
-
 def inner(v, w):
     n = len(v)//2
     v = v.copy()
