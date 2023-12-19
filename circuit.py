@@ -23,7 +23,7 @@ class StabilizerCircuit(StabilizerState):
     @property
     def circuit(self):
         return self._circuit
-        
+    
     def set_state(self, state):
         ### TO DO: check that this is a valid stabilizer state
         self.state = state.copy()

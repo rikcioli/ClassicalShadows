@@ -14,18 +14,33 @@ from circuit import StabilizerCircuit
 # insert EVEN number of qubits    
 N_qubits = 4
 
-N_shots = 1000
+N_shadows = 100
+depth = 4
+N_shots = 1
 
 sc = StabilizerCircuit(N_qubits)
 sc.H(0)
 sc.CNOT(0, 1)
-sc.randEvolution(20)
-sc.measure([i for i in range(N_qubits)])
+sc.CNOT(1, 2)
+sc.CNOT(2, 3)
+state_prep_len = len(sc.circuit)
+temp_circ = sc.circuit.copy()
 
-counts = sc.run(N_shots)
+random_circuits = []
+outcomes = []
 
 
-
+for i in range(N_shadows):
+    sc._circuit = temp_circ.copy()
+    sc.randEvolution(depth)
+    random_cliff = [gate for gate in sc.circuit[state_prep_len:]]
+    sc.measure([i for i in range(N_qubits)])
+    counts = sc.run(N_shots)
+    
+    random_circuits.append(random_cliff)
+    outcomes.append(list(counts.keys())[0])
+    
+    
 
 
 print(sc.stabilizer_table)
