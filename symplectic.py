@@ -9,14 +9,9 @@ import numpy as np
 
 
 def inner(v, w):
-    n = len(v)//2
-    v = v.copy()
-    w = w.copy()
-    for i in range(n):
-        even = w[2*i].copy()
-        w[2*i] = w[2*i+1].copy()
-        w[2*i+1] = even.copy()
-    return np.dot(v, w.T)%2
+    N = len(v)
+    vw = [v[i] & w[i+(-1)**i] for i in range(N)]
+    return sum(vw)%2
 
 def direct_sum(A, B):
     dim = len(A) + len(B)
@@ -24,10 +19,16 @@ def direct_sum(A, B):
     dirsum[0:len(A), 0:len(A)] = A
     dirsum[len(A):dim, len(A):dim] = B
     return dirsum
-    
+
+def metric(n):
+    M = np.array([[0,1], [1,0]])
+    N = M.copy()
+    for i in range(n-1):
+        N = direct_sum(N, M)
+    return N
 
 def transvection(h, v):
-    return (v + inner(v,h)*h)%2
+    return v ^ inner(v,h)&h
 
 def mult_transv(h_list, v):
     # apply multiple transvections in order, from right to left
@@ -116,6 +117,38 @@ def symplectic_n3(n, i):
         gi = np.array([mult_transv(T_prime + T, row) for row in enlarged_g_transp]).T
         return gi
         
+
+def symplecticInverse(n, g):
+    # step 1
+    v = g[:, 0]
+    w = g[:, 1]
+    # step 2
+    e1 = np.zeros(2*n, dtype = int)
+    e1[0] = 1
+    T = find_transvection(v, e1)
+    # step 3
+    Tw = mult_transv(T, w)
+    b = Tw[0]
+    bl = [Tw[i] for i in range(2, 2*n)]
+    h0 = np.zeros(2*n, dtype = int)
+    h0[0] = 1
+    h0[2: 2*n] = np.array(bl)
+    # step 4
+    zv = sum([v[i]*2**i for i in range(2*n)]) - 1
+    bits = [b] + bl
+    zw = sum([bits[i]*2**i for i in range(2*n-1)])
+    cvw = zw*(2**(2*n)-1) + zv
+    # step 5
+    if n == 1:
+        return cvw
+    else:
+        T_final = [h0] + T
+        if b == 0:
+            T_final = [e1] + T_final
+        g_prime = np.array([mult_transv(T_final, row) for row in g.T]).T
+        g_next = g_prime[2:, 2:]
+        return symplecticInverse(n-1, g_next)*(2**(2*n)-1)*(2**(2*n-1)) + cvw
+        
     
     
 # n = 2
@@ -128,6 +161,7 @@ def symplectic_n3(n, i):
 # dim_symplectic = 2**(n*n)*prod
 
 # Sn = []
+# saved_index = []
 # for i in range(dim_symplectic):
 #     g = symplectic_n3(n, i)
 #     if True in [np.array_equal(g, gprev) for gprev in Sn]:
@@ -135,5 +169,12 @@ def symplectic_n3(n, i):
 #         break
 #     else:
 #         Sn.append(g)
+#         symp_ind = symplecticInverse(n, g)
+#         if symp_ind in saved_index:
+#             print("Trovati due indici uguali a i =", i)
+#             break
+#         saved_index.append(symp_ind)
+        
+# symplecticInverse(n, g)
 
 # [np.linalg.multi_dot([symp.T, np.array([[0,1,0,0], [1,0,0,0], [0,0,0,1], [0,0,1,0]]), symp])%2 for symp in Sn]

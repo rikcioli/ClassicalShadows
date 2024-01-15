@@ -43,16 +43,13 @@ class RandomClifford(Instruction):
             for j in range(1, n+1):
                 prod *= 4**j-1
             dim_symplectic = 2**(n*n)*prod
-            index_symplectic = random.randint(0, dim_symplectic - 1)
+            index_symplectic = random.randint(0, dim_symplectic-1)
             r_int = random.randint(0, 2**n - 1)
             s_int = random.randint(0, 2**n - 1)
-            params = (index_symplectic, r_int, s_int)
+            inverse = False
+            params = [index_symplectic, r_int, s_int, inverse]
         
         self._params = params   
-    
-    @property
-    def index(self):
-        return self._i
     
     @property
     def num_qubits(self):
@@ -62,5 +59,14 @@ class RandomClifford(Instruction):
     def params(self):
         return self._params
     
+    @params.setter
+    def params(self, param_list):
+        self._params = param_list.copy()
+    
     def index_to_matrix(self):
         return sp.symplectic_n3(self.num_qubits, self.params[0])
+    
+    def dagger(self):
+        self.params[3] = True
+        
+    
