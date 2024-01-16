@@ -31,10 +31,13 @@ class StabilizerCircuit(StabilizerState):
         
     def reset_state(self):
         self._state = np.eye(2*self.N, 2*self.N+1, 0, dtype=int)
-        
+    
     def reset_circuit(self):
         self._circuit = []
-        
+    
+    def set_circuit(self, stabilizer_circuit):
+        self._circuit = copy.deepcopy(stabilizer_circuit)
+    
     def _CNOT(self, pair):
         a, b = pair[0], pair[1]
         vec_r = self.state[:, 2*self.N]      # CAREFUL: these are just POINTERS to the columns of state
@@ -47,7 +50,6 @@ class StabilizerCircuit(StabilizerState):
         self.state[:, b] = xcol_b^xcol_a     # WARN: value of xcol_b = state[:, b] changed after this line
         self.state[:, self.N+a] = zcol_a^zcol_b      # WARN: value of zcol_a = state[:, N+a] changed after this line
     
-    
     def _H(self, a):
         vec_r = self.state[:, 2*self.N]
         xcol_a = self.state[:, a].copy()    # Necessary copy, pointers are not enough
@@ -57,7 +59,6 @@ class StabilizerCircuit(StabilizerState):
         self.state[:, a] = zcol_a
         self.state[:, self.N+a] = xcol_a
     
-    
     def _S(self, a):
         vec_r = self.state[:, 2*self.N]
         xcol_a = self.state[:, a]
@@ -66,14 +67,13 @@ class StabilizerCircuit(StabilizerState):
         self.state[:, 2*self.N] = vec_r^(xcol_a & zcol_a)
         self.state[:, self.N+a] = xcol_a^zcol_a
         
-    
     def _X(self, a):
         vec_r = self.state[:, 2*self.N]
         zcol_a = self.state[:, self.N+a]
         
         self.state[:, 2*self.N] = vec_r^zcol_a
     
-        
+
     def _Unew(self, qubits_list, matrices, vectors):
         
         n = len(qubits_list)  # dim of the subspace on which U is acting non trivially
@@ -90,24 +90,27 @@ class StabilizerCircuit(StabilizerState):
         
         conversion_dict = dict(enumerate(qubits_list))
         
-        # reduce state
-        reduced_state = np.zeros([2*self.N, 2*n+1], dtype = int)
-        for order_i, i in enumerate(qubits_list):
-            reduced_state[:, order_i] ^= self.state[:, i]
-            reduced_state[:, order_i + n] ^= self.state[:, i + self.N]
-        reduced_state[:, 2*n] ^= self.state[:, 2*self.N]
+        # reduce state if n < N
+        if n < self.N:
+            reduced_state = np.zeros([2*self.N, 2*n+1], dtype = int)
+            for order_i, i in enumerate(qubits_list):
+                reduced_state[:, order_i] ^= self.state[:, i]
+                reduced_state[:, order_i + n] ^= self.state[:, i + self.N]
+            reduced_state[:, 2*n] ^= self.state[:, 2*self.N]
+        else:
+            reduced_state = self.state.copy()
         
         # create matrix with ones positions
         where1_X = [[i for i in range(n) if reduced_state[l, i]] for l in range(2*self.N)]
         where1_Z = [[i-n for i in range(n, 2*n) if reduced_state[l, i]] for l in range(2*self.N)]
         
-        # create matrix with -i positions
-        wherei_dg = [[i for i in range(n) if reduced_state[l, i]&reduced_state[l, i+n]] for l in range(2*self.N)]
+        # create matrix with i positions
+        wherei = [[i for i in range(n) if reduced_state[l, i]&reduced_state[l, i+n]] for l in range(2*self.N)]
         
         # update state
         for l in range(2*self.N):
             minus_sign = 0
-            minus_i_exp = len(wherei_dg[l])
+            i_exp = len(wherei[l])
             for q in range(n):
                 # update state
                 Xq_exp_list_alpha = [alpha[i,q] for i in where1_X[l]]
@@ -118,10 +121,10 @@ class StabilizerCircuit(StabilizerState):
                 Zq_exp_list_delta = [delta[i,q] for i in where1_Z[l]]
                 self.state[l, conversion_dict[q] + self.N] = sum(Zq_exp_list_beta + Zq_exp_list_delta)%2
                 
-                # update -i exponent
+                # update i exponent
                 alpha_and_beta = np.array(Xq_exp_list_alpha, dtype=int) & np.array(Zq_exp_list_beta, dtype=int)
                 gamma_and_delta = np.array(Xq_exp_list_gamma, dtype=int) & np.array(Zq_exp_list_delta, dtype=int)
-                minus_i_exp += sum(alpha_and_beta) + sum(gamma_and_delta)
+                i_exp += sum(alpha_and_beta) + sum(gamma_and_delta)
                 
                 if len(where1_X[l])>0:
                     for betapos in where1_X[l]:
@@ -142,18 +145,18 @@ class StabilizerCircuit(StabilizerState):
             # create rs_list to sum        
             rs_list = [r[i] for i in where1_X[l]]
             rs_list += [s[i] for i in where1_Z[l]]
-            # update minus sign without considering -i factors
+            # update minus sign without considering i factors
             minus_sign ^= sum(rs_list)%2
             
-            # reabsorb -i in all the stabilizers that have XZ
+            # reabsorb i in all the stabilizers that have XZ
             X_after = np.array([self.state[l, qubit] for qubit in qubits_list], dtype=int)
             Z_after = np.array([self.state[l, qubit+self.N] for qubit in qubits_list], dtype=int)
-            minus_i_exp -= sum(X_after & Z_after)
+            i_exp -= sum(X_after & Z_after)
             
-            if minus_i_exp%4 == 2:
+            if i_exp%4 == 2:
                 minus_sign ^= 1
-            elif minus_i_exp%4 == 1 or minus_i_exp%4 == 3:
-                raise RuntimeError("-i factor is raised to the power of 1 or 3")
+            elif i_exp%4 == 1 or i_exp%4 == 3:
+                raise RuntimeError("i factor is raised to the power of 1 or 3")
             
             self.state[l, 2*self.N] ^= minus_sign
         
@@ -215,7 +218,8 @@ class StabilizerCircuit(StabilizerState):
     #         z_exponent = np.array([(np.dot(x[:, l], beta[:, order_q]) + np.dot(z[:, l], delta[:, order_q]))%2 for l in range(2*self.N)])
     #         self.state[:, q] = x_exponent
     #         self.state[:, q+self.N] = z_exponent
-        
+    
+
     def _UdgNew(self, qubits_list, matrices, vectors):
         
         n = len(qubits_list)  # dim of the subspace on which U is acting non trivially
@@ -226,7 +230,7 @@ class StabilizerCircuit(StabilizerState):
         self.reset_state()
         
         # first apply Udg with null r and s
-        vectors_dagger = [np.array([0, 0]), np.array([0, 0])]
+        vectors_dagger = [np.zeros(n, dtype=int), np.zeros(n, dtype=int)]
         matrices_dagger = self._findDagger(matrices)
         self._Unew(qubits_list, matrices_dagger, vectors_dagger)
         
@@ -299,7 +303,6 @@ class StabilizerCircuit(StabilizerState):
         
     #     self._U(qubits_list, matrices_dagger, vectors_dagger)    
             
-
     def _findDagger(self, matrices):
         # Need to invert the unitary
         # Find new matrices
@@ -319,7 +322,8 @@ class StabilizerCircuit(StabilizerState):
         matrices_dagger = [M_inv[0:n, 0:n], M_inv[0:n, n:2*n], M_inv[n:2*n, 0:n], M_inv[n:2*n, n:2*n]]
       
         return matrices_dagger
-        
+    
+ 
     def _randClifford(self, qubits_list, params):
         """Applies clifford on qubits in qubits_list
         which clifford is given as three numbers in the params tuple:
@@ -335,10 +339,10 @@ class StabilizerCircuit(StabilizerState):
         s = np.array([(params[2]>>j) % 2 for j in range(n)])
         gi = sp.symplectic_n3(n, index_sp)
         
-        alpha = gi[0:3:2, 0:3:2].T
-        beta = gi[1:4:2, 0:3:2].T
-        gamma = gi[0:3:2, 1:4:2].T
-        delta = gi[1:4:2, 1:4:2].T
+        alpha = gi[0:2*n-1:2, 0:2*n-1:2].T
+        beta = gi[1:2*n:2, 0:2*n-1:2].T
+        gamma = gi[0:2*n-1:2, 1:2*n:2].T
+        delta = gi[1:2*n:2, 1:2*n:2].T
         
         matrices = [alpha, beta, gamma, delta]
         vectors = [r, s]
@@ -355,7 +359,6 @@ class StabilizerCircuit(StabilizerState):
             self._Unew(qubits_list, matrices, vectors)
             
         
-    
     def _measure(self, a):
         xa_positions = np.where(self.state[:, a] == 1)[0]     #save position of all stab and destab that do not commute with Z_a
         p = xa_positions[-1]
@@ -443,6 +446,7 @@ class StabilizerCircuit(StabilizerState):
         if is_measured == True:  
             return counts
         
+          
     def saveShadows(self, N_shadows, depth):
         """
         Extract classical shadows of the current state (make sure it has 
@@ -472,8 +476,36 @@ class StabilizerCircuit(StabilizerState):
         self.state = saved_state
         self.circuit = saved_circ
         
-        return random_circuits, outcomes
+        return [random_circuits, outcomes]
         
+    def saveShadowsGlobal(self, N_shadows):
+        
+        saved_circ = self.circuit.copy()
+        saved_state = self.state.copy()
+        
+        random_circuits = []
+        outcomes = []
+        
+        for i in range(N_shadows):
+            self.reset_circuit()
+            self.randClifford([a for a in range(self.N)])
+            # save random unitary
+            random_circuits.append(self.circuit)
+            
+            # run random evolution
+            self.state = saved_state
+            for gate in self.circuit:
+                self._randClifford(gate.qubits, gate.params)
+            
+            # measure and save outcome
+            measurements = [self._measure(a) for a in range(self.N)]
+            outcomes.append(measurements)
+        
+        self.state = saved_state
+        self.circuit = saved_circ
+        
+        return [random_circuits, outcomes]
+    
     
     def plot_histogram(self, counts):
         sorted_counts = dict(sorted(counts.items()))
@@ -493,7 +525,6 @@ class StabilizerCircuit(StabilizerState):
         
 from numpy import matrix
 from numpy import linalg
-from state import gauss_elim
 
 def modMatInv(A,p):       # Finds the inverse of matrix A mod p
   n=len(A)
@@ -504,11 +535,13 @@ def modMatInv(A,p):       # Finds the inverse of matrix A mod p
       adj[i][j]=((-1)**(i+j)*int(round(linalg.det(minor(A,j,i)))))%p
   return (modInv(int(round(linalg.det(A))),p)*adj)%p
 
+
 def modInv(a,p):          # Finds the inverse of a mod p, if it exists
   for i in range(1,p):
     if (i*a)%p==1:
       return i
   raise ValueError(str(a)+" has no inverse mod "+str(p))
+
 
 def minor(A,i,j):    # Return matrix A with the ith row and jth column deleted
   A=np.array(A)
@@ -525,48 +558,5 @@ def minor(A,i,j):    # Return matrix A with the ith row and jth column deleted
       q=q+1
     p=p+1
   return minor
-
-def checkLI(vector, vectors_list):
-    # check if vector is linearly independent (mod 2) from the vectors in vectors_list
-    if 1 not in vector:
-        return False
-    M = np.array(vectors_list + [vector])
-    M = gauss_elim(M)
-    for row in M:
-        if 1 not in row:
-            return False
-    return True
-    
-
-def extractMaxRank(A):
-    # Given a 2N by 2n+1 rectangle matrix of 0 and 1, extract 2n by 2n square submatrix of
-    # max rank (det != 0)
-    A = A.copy()
-    NN = len(A)     # 2N
-    nn = len(A[0])-1  # 2n
-    
-    first_try = A[:nn, :nn]
-    if int(round(linalg.det(first_try)))%2:
-        return A[:nn, :nn+1]
-    else:
-        # find which vector appears at least twice (is linearly dependent)
-        vectors = []
-        positions = []
-        A_reduced = A[:, :nn]
-        for i in range(NN):
-            if 1 in A_reduced[i]:
-                positions.append(i)
-                vectors.append(A_reduced[i])
-                break
-            
-        for i in range(positions[-1]+1, NN):      
-            if checkLI(A_reduced[i], vectors):
-                positions.append(i)
-                vectors.append(A_reduced[i])
-            if len(positions) == nn:
-                break
-        
-        M = np.array([A[pos] for pos in positions])
-        return M
     
 

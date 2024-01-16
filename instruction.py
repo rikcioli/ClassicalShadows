@@ -42,7 +42,7 @@ class RandomClifford(Instruction):
             prod = 1
             for j in range(1, n+1):
                 prod *= 4**j-1
-            dim_symplectic = 2**(n*n)*prod
+            dim_symplectic = prod*2**(n*n)
             index_symplectic = random.randint(0, dim_symplectic-1)
             r_int = random.randint(0, 2**n - 1)
             s_int = random.randint(0, 2**n - 1)

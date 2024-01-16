@@ -35,7 +35,6 @@ class StabilizerState():
         """Set the stabilizer table of the system"""          
         self._state = input_state.copy()
         
-    
     def _sum_rows(self, row_h, row_i):
         # given two rows h and i of 2*N+1 elements, returns h+i with correct rh
         xi = row_i[0:self.N]
@@ -52,11 +51,12 @@ class StabilizerState():
         row_h = row_h^row_i
         row_h[2*self.N] = rh
         return row_h
-
+    
     def _rowsum(self, h, i):
         # given target h and input i, UPDATES IN PLACE h = h+i         
         self.state[h] = self._sum_rows(self.state[h], self.state[i])    #update h row as sum of i and h rows
-    
+        
+
     def _fullrank_X(self):
         # Applies hadamards to make X matrix have full rank
         gauss_X = self._gauss_elim(self.state[self.N:2*self.N, 0:self.N].copy())
@@ -65,7 +65,6 @@ class StabilizerState():
         
         return qubits
 
-    
     def _is_valid_state(self, state = None):
         if state is None:
             state = self.state
@@ -77,13 +76,42 @@ class StabilizerState():
             return False
         else:
             return True
-        
     
+    def gauss_elim_stab(self, state_stabs):
+        """Given lower part of state table matrix returns gaussian eliminated version 
+        using rowsum
+        """
+        M = state_stabs.copy()
+        m, n = M.shape
+        i, j = 0, 0
+        
+        while i < m and j < n:
+            # find position of first 1 in the remainder of column j
+            pos = np.argmax(M[i:, j]) + i
+            
+            if M[pos, j] == 0:
+                j += 1
+            else:
+                # swap rows
+                if pos > i:
+                    temp = M[i].copy()
+                    M[i] = M[pos]
+                    M[pos] = temp
+                
+                # rowsum over all rows that have a 1 below col j
+                for k in range(i+1, m):
+                    if M[k, j] == 1:
+                        M[k] = self._sum_rows(M[k], M[i])
+                i += 1
+                j += 1
+        
+        return M
+        
     def dot_zero(self, state = None):
-        # returns overlap with |0> state <0|\psi>
+        # returns overlap with |0> state |<0|\psi>|
         if state is None:
             state = self.state
-        state = gauss_elim(state[self.N:])
+        state = self.gauss_elim_stab(state[self.N:])
         X_matrix = state[:, :self.N]
         vec_r = state[:, 2*self.N]
         
@@ -92,11 +120,12 @@ class StabilizerState():
             if 1 in X_matrix[l, l:]:
                 s += 1
             elif (vec_r[l] != 0):
-                    return 0
+                #print(state, "\n")
+                return 0
         return 2**(-s/2)
     
-    def skew_product(self, state1, state2):
-        return np.dot(state1[:self.N], state2[self.N:2*self.N])%2 ^ np.dot(state1[self.N:2*self.N], state2[:self.N])%2
+    def skew_product(self, stab1, stab2):
+        return np.dot(stab1[:self.N], stab2[self.N:2*self.N])%2 ^ np.dot(stab1[self.N:2*self.N], stab2[:self.N])%2
     
     def expval(self, stabilizer, state = None):
         """
@@ -124,35 +153,9 @@ class StabilizerState():
             return (-1)**r_extra
             
         
-def gauss_elim(M):
 
-    M = M.copy()
-    m, n = M.shape
-
-    i=0
-    j=0
-
-    while i < m and j < n:
-        # find value and index of largest element in remainder of column j
-        k = np.argmax(M[i:, j]) +i
-
-        # swap rows
-        temp = np.copy(M[k])
-        M[k] = M[i]
-        M[i] = temp
-
-        aijn = M[i, j:]
-
-        col = np.copy(M[:, j]) #make a copy otherwise M will be directly affected
-
-        col[i] = 0 #avoid xoring pivot row with itself
-
-        flip = np.outer(col, aijn)
-
-        M[:, j:] = M[:, j:] ^ flip
-
-        i += 1
-        j +=1
-
-    return M
                    
+
+                
+        
+        
