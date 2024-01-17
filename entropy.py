@@ -14,8 +14,9 @@ import tqdm
 from collections import Counter
 from numpy import savetxt
 import warnings
+import itertools
 
-N_qubits = 8
+N_qubits = 2
 
 sc = StabilizerCircuit(N_qubits)
 
@@ -28,16 +29,15 @@ print(sc.state)
 saved_state = sc.state
 
 
-
 N_shadows = 50
 N_bins = 1
 samples_per_bin = 10
-starting_N_samples = 1
+starting_N_samples = 100
 save_results = False
 if not save_results:
     warnings.warn("WARNING: save_results set to False")
 
-for depth in range(1, 2):
+for depth in range(1, 5):
     
     purities_per_bin = []
     
@@ -63,8 +63,7 @@ for depth in range(1, 2):
         for sample_number in tqdm.tqdm(range(N_samples), desc="Evaluating "+str(N_shadows)+" shadows with "+str(N_samples)+ " samples..."):
             
             # Extract classical shadows     
-            shadows = sc.saveShadowsGlobal(N_shadows)
-            #shadows = sc.saveShadows(N_shadows, depth)
+            shadows = sc.saveShadows(N_shadows, depth)
             random_circuits = shadows[0]
             outcomes = shadows[1]
             
@@ -79,6 +78,12 @@ for depth in range(1, 2):
             
             [state.run() for state in Udagb_states]
                 
+            
+            # U_Udagb_states = [StabilizerCircuit(N_qubits, Udagb_states[s].state, random_circuits[r]) for s, r in itertools.combinations(range(N_shadows), 2)]
+            # outcomes_combinations = (outcomes[r] for s, r in itertools.combinations(range(N_shadows), 2))
+            # [state.run() for state in U_Udagb_states]
+            # main_trace = sum((state.dot_outcome(outcome)**2 for state, outcome in zip(U_Udagb_states, outcomes_combinations)))
+            
             main_trace = 0
             for s, state_s in enumerate(Udagb_states):
                 current_state = state_s.state.copy()
@@ -110,7 +115,7 @@ for depth in range(1, 2):
     plt.errorbar(x_axis, avg_purity, yerr = sdom_purity)
     plt.xlabel(r"$N_{samples}$")
     plt.ylabel("Purity")
-    plt.title(r'$N_{shadows} = $'+str(N_shadows), fontsize=16)
+    plt.title(r'$N_{shadows} = $'+str(N_shadows)+' depth = '+str(depth), fontsize=16)
     plt.grid(axis = 'y', linestyle = '--')
     plt.show()  
     

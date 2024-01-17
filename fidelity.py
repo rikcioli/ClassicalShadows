@@ -17,13 +17,13 @@ from numpy import savetxt
 import warnings
 
 depths = [i for i in range(1, 11)]
-min_qubits = 6
-max_qubits = 6
+min_qubits = 4
+max_qubits = 12
 
 avgfid_per_N_qubits = []
 sdomfid_per_N_qubits = []
 
-save_results = False
+save_results = True
 if not save_results:
     print("WARNING: save_results set to False", flush=True)
 
@@ -38,7 +38,7 @@ for N_qubits in range(min_qubits, max_qubits+2, 2):
     phi = sc.state.copy()
     
     N_shadows = 50
-    N_samples = 2
+    N_samples = 1000
     avgfid_per_depth = []
     sdomfid_per_depth = []
     
@@ -67,12 +67,15 @@ for N_qubits in range(min_qubits, max_qubits+2, 2):
         avg_fidelity = np.mean(fidelity_per_sample)
         sdom_fidelity = np.std(fidelity_per_sample)/np.sqrt(N_samples)
         if save_results:
-            savetxt('Results/Fidelity/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_avg_fidelity.csv', avg_fidelity, delimiter=',')
-            savetxt('Results/Fidelity/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_sdom_fidelity.csv', sdom_fidelity, delimiter=',')
+            savetxt('Results/Fidelity/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_fidelity_per_sample.csv', fidelity_per_sample, delimiter=',')
         
         avgfid_per_depth.append(avg_fidelity)
         sdomfid_per_depth.append(sdom_fidelity)
     
+    if save_results:
+        savetxt('Results/Fidelity/'+str(N_qubits)+'Q-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_avg_fidelity_per_depth.csv', avgfid_per_depth, delimiter=',')
+        savetxt('Results/Fidelity/'+str(N_qubits)+'Q-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_sdom_fidelity_per_depth.csv', sdomfid_per_depth, delimiter=',')
+        
     plt.figure(dpi=600)
     plt.errorbar(depths, avgfid_per_depth, yerr = sdomfid_per_depth)
     plt.xlabel(r"$Depth$")

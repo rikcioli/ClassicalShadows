@@ -90,15 +90,13 @@ class StabilizerCircuit(StabilizerState):
         
         conversion_dict = dict(enumerate(qubits_list))
         
-        # reduce state if n < N
-        if n < self.N:
-            reduced_state = np.zeros([2*self.N, 2*n+1], dtype = int)
-            for order_i, i in enumerate(qubits_list):
-                reduced_state[:, order_i] ^= self.state[:, i]
-                reduced_state[:, order_i + n] ^= self.state[:, i + self.N]
-            reduced_state[:, 2*n] ^= self.state[:, 2*self.N]
-        else:
-            reduced_state = self.state.copy()
+        # reduce and REMAP state
+        reduced_state = np.zeros([2*self.N, 2*n+1], dtype = int)
+        for order_i, i in enumerate(qubits_list):
+            reduced_state[:, order_i] ^= self.state[:, i]
+            reduced_state[:, order_i + n] ^= self.state[:, i + self.N]
+        reduced_state[:, 2*n] ^= self.state[:, 2*self.N]
+        
         
         # create matrix with ones positions
         where1_X = [[i for i in range(n) if reduced_state[l, i]] for l in range(2*self.N)]
@@ -421,6 +419,7 @@ class StabilizerCircuit(StabilizerState):
             pairs = [qubits[2*i:2*(i+1)] for i in range(len(qubits)//2)]
             for pair in pairs:
                 self.randClifford(pair)
+                
     
     def run(self, shots = 1):
         initial_state = self.state.copy()
@@ -445,6 +444,25 @@ class StabilizerCircuit(StabilizerState):
             
         if is_measured == True:  
             return counts
+        
+    def dot_outcome(self, outcome):
+        # bit flip all qubits for which outcome is 1
+        [self._X(i) for i in range(self.N) if outcome[i]]
+        
+        # perform dot_zero
+        state = self.gauss_elim_stab(self.state[self.N:])
+        X_matrix = state[:, :self.N]
+        vec_r = state[:, 2*self.N]
+        
+        s = 0
+        for l in range(self.N):
+            if 1 in X_matrix[l, l:]:
+                s += 1
+            elif (vec_r[l] != 0):
+                #print(state, "\n")
+                return 0
+        return 2**(-s/2)
+            
         
           
     def saveShadows(self, N_shadows, depth):
