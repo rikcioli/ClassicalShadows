@@ -44,7 +44,7 @@ for depth in range(1, 2):
     #fidelities = []
     
     #tN = 4.15*(N_shadows/100)**2 - 2.67*(N_shadows/100) + 1.95
-    tN = 3.72*(N_shadows/100)**2 - 1.88*(N_shadows/100) + 1.12
+    tN = (N_qubits/2)*depth*3.72*(N_shadows/100)**2 - 1.88*(N_shadows/100) + 1.12
     
     estimated_time = tN*N_bins*(starting_N_samples + samples_per_bin*(N_bins-1)/2)
     
