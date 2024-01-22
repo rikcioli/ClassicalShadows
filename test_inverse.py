@@ -14,7 +14,7 @@ import tqdm
 from collections import Counter
 from numpy import savetxt
 
-N_qubits = 2
+N_qubits = 4
 
 sc = StabilizerCircuit(N_qubits)
 
@@ -25,8 +25,10 @@ sc.run()
 print(sc.state)
 sc.circuit = []
 
-sc.randClifford([1,0])
 sc.randClifford([0,1])
+sc.randClifford([2,3])
+sc.randClifford([1,0])
+sc.randClifford([3,2])
 sc.run()
 print(sc.state)
 

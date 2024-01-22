@@ -6,6 +6,7 @@ Created on Wed Dec  6 11:13:00 2023
 """
 
 import numpy as np
+from numba import njit
 
 
 class StabilizerState():
@@ -35,21 +36,24 @@ class StabilizerState():
         """Set the stabilizer table of the system"""          
         self._state = input_state.copy()
         
-    def _sum_rows(self, row_h, row_i):
+    @staticmethod
+    @njit(cache=True)
+    def _sum_rows(row_h, row_i):
         # given two rows h and i of 2*N+1 elements, returns h+i with correct rh
-        xi = row_i[0:self.N]
-        zi = row_i[self.N:2*self.N]
-        xh = row_h[0:self.N]
-        zh = row_h[self.N:2*self.N]
+        N = (len(row_h)-1)//2
+        xi = row_i[0:N]
+        zi = row_i[N:2*N]
+        xh = row_h[0:N]
+        zh = row_h[N:2*N]
         
         # evaluate sum of g terms
         vec_g = (xi & zi)*(zh-xh) + (xi & (zi^1))*(2*xh-1)*zh + ((xi^1) & zi)*(1-2*zh)*xh  #calculate new rh based on rh, ri and sumg = \sum_j g_j
         sum_g = sum(vec_g)
         
         # evaluate rh and row_h+row_i and update
-        rh = ((2*row_h[2*self.N] + 2*row_i[2*self.N] + sum_g)%4)/2   #calculate new rh based on rh, ri and sumg = \sum_j g_j
+        rh = ((2*row_h[2*N] + 2*row_i[2*N] + sum_g)%4)/2   #calculate new rh based on rh, ri and sumg = \sum_j g_j
         row_h = row_h^row_i
-        row_h[2*self.N] = rh
+        row_h[2*N] = rh
         return row_h
     
     def _rowsum(self, h, i):
@@ -76,6 +80,7 @@ class StabilizerState():
             return False
         else:
             return True
+    
     
     def gauss_elim_stab(self, state_stabs):
         """Given lower part of state table matrix returns gaussian eliminated version 

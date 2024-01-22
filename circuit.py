@@ -17,17 +17,20 @@ from instruction import Instruction, RandomClifford
 
 class StabilizerCircuit(StabilizerState):
     
-    def __init__(self, N_qubits, state = None, circuit = []):
+    def __init__(self, N_qubits, state = None, circuit = None):
         super().__init__(N_qubits, state)
-        self._circuit = circuit
+        if circuit is None:
+            self._circuit = []
+        else:
+            self._circuit = copy.deepcopy(circuit)
     
     @property
     def circuit(self):
         return self._circuit
     
     @circuit.setter
-    def circuit(self, stabilizer_circuit):
-        self._circuit = copy.deepcopy(stabilizer_circuit)
+    def circuit(self, circuit):
+        self._circuit = copy.deepcopy(circuit)
         
     def reset_state(self):
         self._state = np.eye(2*self.N, 2*self.N+1, 0, dtype=int)
@@ -72,7 +75,7 @@ class StabilizerCircuit(StabilizerState):
         zcol_a = self.state[:, self.N+a]
         
         self.state[:, 2*self.N] = vec_r^zcol_a
-    
+        
 
     def _Unew(self, qubits_list, matrices, vectors):
         
@@ -91,11 +94,11 @@ class StabilizerCircuit(StabilizerState):
         conversion_dict = dict(enumerate(qubits_list))
         
         # reduce and REMAP state
-        reduced_state = np.zeros([2*self.N, 2*n+1], dtype = int)
+        reduced_state = np.empty([2*self.N, 2*n+1], dtype = int)
         for order_i, i in enumerate(qubits_list):
-            reduced_state[:, order_i] ^= self.state[:, i]
-            reduced_state[:, order_i + n] ^= self.state[:, i + self.N]
-        reduced_state[:, 2*n] ^= self.state[:, 2*self.N]
+            reduced_state[:, order_i] = self.state[:, i]
+            reduced_state[:, order_i + n] = self.state[:, i + self.N]
+        reduced_state[:, 2*n] = self.state[:, 2*self.N]
         
         
         # create matrix with ones positions
@@ -157,65 +160,6 @@ class StabilizerCircuit(StabilizerState):
                 raise RuntimeError("i factor is raised to the power of 1 or 3")
             
             self.state[l, 2*self.N] ^= minus_sign
-        
-        
-    # def _U(self, qubits_list, matrices, vectors):
-    #     """Apply most generic clifford unitary as specified by matrices alpha, 
-    #     beta, gamma, delta and vectors r, s.
-
-    #     """
-    #     n = len(qubits_list)  # dim of the subspace on which U is acting non trivially
-    #     if n > self.N:
-    #         raise RuntimeError("Number of given qubits exceeds N")
-        
-    #     alpha = matrices[0]
-    #     beta = matrices[1]
-    #     gamma = matrices[2]
-    #     delta = matrices[3]
-        
-    #     r = vectors[0]
-    #     s = vectors[1]
-        
-    #     x = np.array([self.state[:, i] for i in qubits_list])
-    #     z = np.array([self.state[:, i+self.N] for i in qubits_list])
-        
-    #     sign_change = np.zeros(2*self.N, dtype = int)
-    #     proj = np.ones(n, dtype=int)
-        
-    #     # update minus sign
-    #     beta_gammaT = np.dot(beta, gamma.T)%2
-    #     beta_alphaT = np.dot(beta, alpha.T)%2
-    #     delta_gammaT = np.dot(delta, gamma.T)%2
-    #     delta_alphaT = np.dot(delta, alpha.T)%2
-        
-    #     # we introduce two variables: i (which initial qubit) and order_i 
-    #     # order_i means the position of qubit i in the subspace on which the clifford is acting
-    #     # e.g. we act con qubit i = 3 and i = 7, then i = 3 is the first (order_i = 0)
-    #     # and i = 7 is the second (order_i = 1)
-    #     # this is useful as we need to map the alpha, beta (etc) n by n matrices to the actual qubits
-        
-    #     for order_i, i in enumerate(qubits_list):
-            
-    #         sign_change ^= (r[order_i]&x[order_i] ^ s[order_i]&z[order_i])
-            
-    #         B1 = np.array([np.dot(beta_gammaT[order_i], proj & z[:, l]) %2 for l in range(2*self.N)])
-    #         proj[order_i] = 0
-    #         B2 = np.array([np.dot(beta_alphaT[order_i], proj & x[:, l])%2 for l in range(2*self.N)])
-    #         sign_change ^= x[order_i]&(B1^B2)
-            
-    #         D1 = np.array([np.dot(delta_gammaT[order_i], proj & z[:, l])%2 for l in range(2*self.N)])
-    #         D2 = np.array([np.dot(delta_alphaT[order_i], proj & x[:, l])%2 for l in range(2*self.N)])            
-    #         sign_change ^= z[order_i]&(D1^D2)
-        
-    #     self.state[:, 2*self.N] ^= sign_change
-        
-    #     # update state
-    #     for order_q, q in enumerate(qubits_list):
-            
-    #         x_exponent = np.array([(np.dot(x[:, l], alpha[:, order_q]) + np.dot(z[:, l], gamma[:, order_q]))%2 for l in range(2*self.N)])
-    #         z_exponent = np.array([(np.dot(x[:, l], beta[:, order_q]) + np.dot(z[:, l], delta[:, order_q]))%2 for l in range(2*self.N)])
-    #         self.state[:, q] = x_exponent
-    #         self.state[:, q+self.N] = z_exponent
     
 
     def _UdgNew(self, qubits_list, matrices, vectors):
@@ -243,63 +187,6 @@ class StabilizerCircuit(StabilizerState):
         self.state = current_state
         self._Unew(qubits_list, matrices_dagger, vectors_dagger)
         
-    
-    # def _Udg(self, qubits_list, matrices, vectors, matrices_dagger):
-    #     """Apply inverse of the clifford unitary specified by matrices alpha, 
-    #     beta, gamma, delta and vectors r, s.
-    #     """
-        
-    #     n = len(qubits_list)  # dim of the subspace on which U is acting non trivially
-    #     if n > self.N:
-    #         raise RuntimeError("Number of given qubits exceeds N")
-            
-    #     # save current minus sign vector
-    #     minus_signs = self.state[:, 2*self.N].copy()
-        
-    #     # first apply Udg with null r and s
-    #     vectors_dagger = [np.array([0, 0]), np.array([0, 0])]
-    #     self._U(qubits_list, matrices_dagger, vectors_dagger)
-        
-    #     # now apply U, it should result in an identity matrix up to sign
-    #     self._U(qubits_list, matrices, vectors)
-        
-    #     # compare two sign vectors
-    #     new_signs = self.state[:, 2*self.N].copy()
-    #     diff_vec = (new_signs - minus_signs)%2
-        
-    #     # if there is a difference, we need to change vectors_dagger
-    #     if 1 in diff_vec:
-    #         # construct a matrix in the following way:
-    #         # first n columns are the entries of the X matrix of the state 
-    #         # for the qubits in qubits_list
-    #         # second n columns are the entries of the Z matrix of the state 
-    #         # for the qubits in qubits_list
-    #         # last column is diff_vec
-    #         """
-    #         reduced_state_diff_vec = np.zeros([2*self.N, 2*n+1], dtype = int)
-    #         for order_i, i in enumerate(qubits_list):
-    #             reduced_state_diff_vec[:, order_i] ^= self.state[:, i]
-    #             reduced_state_diff_vec[:, order_i + n] ^= self.state[:, i + self.N]
-    #         reduced_state_diff_vec[:, 2*n] = diff_vec
-            
-    #         # find correct value of r and s by inverting submatrix of x and z
-    #         max_rank_submatrix = extractMaxRank(reduced_state_diff_vec)
-    #         inverse_submatrix = modMatInv(max_rank_submatrix[:, :2*n], 2)
-    #         rs_vec = np.dot(inverse_submatrix, max_rank_submatrix[:, 2*n])%2
-    #         # update r and s
-    #         vectors_dagger = [rs_vec[:n], rs_vec[n:2*n]]
-    #         # restore old values of the signs
-    #         self.state[:, 2*self.N] = minus_signs.copy()
-    #         """
-            
-    #         # inverse_state = modMatInv(self.state[:, :2*self.N], 2)
-    #         # rs_vec = np.dot(inverse_state, diff_vec)%2
-    #         # r_vec = np.array([rs_vec[qubit] for qubit in qubits_list])
-    #         # s_vec = np.array([rs_vec[qubit + self.N] for qubit in qubits_list])
-    #         # vectors_dagger = [r_vec, s_vec]
-    #         # self.state[:, 2*self.N] = minus_signs.copy()
-        
-    #     self._U(qubits_list, matrices_dagger, vectors_dagger)    
             
     def _findDagger(self, matrices):
         # Need to invert the unitary
@@ -335,7 +222,7 @@ class StabilizerCircuit(StabilizerState):
         index_sp = params[0]
         r = np.array([(params[1]>>j) % 2 for j in range(n)])
         s = np.array([(params[2]>>j) % 2 for j in range(n)])
-        gi = sp.symplectic_n3(n, index_sp)
+        gi = sp.symplectic_n3(n, index_sp).T        #transpose is needed since symplectic_n3 returns gi_T
         
         alpha = gi[0:2*n-1:2, 0:2*n-1:2].T
         beta = gi[1:2*n:2, 0:2*n-1:2].T
@@ -346,11 +233,6 @@ class StabilizerCircuit(StabilizerState):
         vectors = [r, s]
         
         dagger = params[3]
-        # if dagger:
-        #     metric = sp.metric(n)
-        #     gi_inverse = np.linalg.multi_dot([metric, gi.T, metric])%2
-        #     matrices_dagger = [gi_inverse[0:3:2, 0:3:2].T, gi_inverse[1:4:2, 0:3:2].T, gi_inverse[0:3:2, 1:4:2].T, gi_inverse[1:4:2, 1:4:2].T]
-        #     self._UdgNew(qubits_list, matrices, vectors, matrices_dagger)
         if dagger:
             self._UdgNew(qubits_list, matrices, vectors)
         else:
@@ -462,16 +344,15 @@ class StabilizerCircuit(StabilizerState):
                 #print(state, "\n")
                 return 0
         return 2**(-s/2)
-            
-        
+    
           
     def saveShadows(self, N_shadows, depth):
         """
         Extract classical shadows of the current state (make sure it has 
                                                         already run)
         """
-        saved_circ = self.circuit.copy()
-        saved_state = self.state.copy()
+        saved_circ = self.circuit
+        saved_state = self.state
         
         random_circuits = []
         outcomes = []
@@ -494,7 +375,7 @@ class StabilizerCircuit(StabilizerState):
         self.state = saved_state
         self.circuit = saved_circ
         
-        return [random_circuits, outcomes]
+        return (random_circuits, outcomes)
         
     def saveShadowsGlobal(self, N_shadows):
         

@@ -14,47 +14,26 @@ import tqdm
 from collections import Counter
 from numpy import savetxt
 import warnings
+from multiprocessing import Pool
 
 from timeit import default_timer as timer
 
 
-
-max_depth = 10
-depths = [i for i in range(1, max_depth+1)]
-min_qubits = 2
-max_qubits = 12
-
-avgfid_per_N_qubits = []
-sdomfid_per_N_qubits = []
-
-save_results = True
-if not save_results:
-    print("WARNING: save_results set to False", flush=True)
+def fidelity_vs_depth(N_qubits, max_depth, N_shadows = 50, N_samples = 1000, save_results = True):
     
-    
-timetable = []
-
-for N_qubits in range(min_qubits, max_qubits+2, 2):
-    
-    start = timer()
+    depths = [i for i in range(1, max_depth+1)]
     sc = StabilizerCircuit(N_qubits)
 
     # Prepare arbitrary initial state
-    
     sc.randClifford([a for a in range(N_qubits)])
     sc.run()
     phi = sc.state.copy()
     
-    N_shadows = 50
-    N_samples = 1000
     avgfid_per_depth = []
     sdomfid_per_depth = []
-    
-    est_time = N_samples*(0.043*N_qubits**2 - 0.22*N_qubits + 1.24)*max_depth*(max_depth+1)/10
-    
+      
     print("Running program with "+str(N_qubits)+" qubits", flush=True)
     print("N_shadows = "+str(N_shadows)+", N_samples =", N_samples)
-    print("Estimated time = ")
     
     for depth in tqdm.tqdm(depths, desc="Evaluating circuit depths up to "+str(depths[-1])):
         
@@ -87,21 +66,32 @@ for N_qubits in range(min_qubits, max_qubits+2, 2):
         savetxt('Results/Fidelity/'+str(N_qubits)+'Q-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_avg_fidelity_per_depth.csv', avgfid_per_depth, delimiter=',')
         savetxt('Results/Fidelity/'+str(N_qubits)+'Q-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_sdom_fidelity_per_depth.csv', sdomfid_per_depth, delimiter=',')
     
-    end = timer()
-    print("Time taken for", N_qubits+':'+str(end-start))
-    timetable.append(end-start)
-    
-    
     plt.figure(dpi=600)
     plt.errorbar(depths, avgfid_per_depth, yerr = sdomfid_per_depth)
     plt.xlabel(r"$Depth$")
     plt.ylabel("Fidelity")
     plt.title(r'$N_{qubits} = $'+str(N_qubits)+', $N_{shadows} = $'+str(N_shadows)+', $N_{samples} = $'+str(N_samples), fontsize=16)
     plt.grid(axis = 'y', linestyle = '--')
-    plt.show()  
+    plt.show()
+
+
+if __name__ == '__main__':
+
+    max_depth = 10
+    min_qubits = 6
+    max_qubits = 12
     
-    avgfid_per_N_qubits.append(avgfid_per_depth)
-    sdomfid_per_N_qubits.append(sdomfid_per_depth)
+    avgfid_per_N_qubits = []
+    sdomfid_per_N_qubits = []
+    
+    save_results = True
+    if not save_results:
+        print("WARNING: save_results set to False", flush=True)
+    
+    with Pool(4) as pool:
+        pool.starmap(fidelity_vs_depth, [(2*n, max_depth) for n in range(min_qubits//2, max_qubits//2+1)])    
+    
+
 
 
 """
