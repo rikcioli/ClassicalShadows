@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import symplectic as sp
 from state import StabilizerState
 from instruction import Instruction, RandomClifford
+from numba import njit, types, typed
 
 
 class StabilizerCircuit(StabilizerState):
@@ -76,6 +77,96 @@ class StabilizerCircuit(StabilizerState):
         
         self.state[:, 2*self.N] = vec_r^zcol_a
         
+        
+    @staticmethod
+    @njit(cache=True)
+    def _Unew_static(state, qubits_list, matrices, vectors):
+        
+        n = len(qubits_list)  # dim of the subspace on which U is acting non trivially
+        N = len(state)//2   # total number of qubits
+        if n > N:
+            raise RuntimeError("Number of given qubits exceeds N")
+        
+        alpha = matrices[0]
+        beta = matrices[1]
+        gamma = matrices[2]
+        delta = matrices[3]
+        
+        r = vectors[0]
+        s = vectors[1]
+        
+        # reduce and REMAP state
+        reduced_state = np.empty((2*N, 2*n+1), dtype = np.int64)
+        for order_i, i in enumerate(qubits_list):
+            reduced_state[:, order_i] = state[:, i]
+            reduced_state[:, order_i + n] = state[:, i + N]
+        reduced_state[:, 2*n] = state[:, 2*N]
+        
+        
+        # create matrix with ones positions
+        where1_X = [[i for i in range(n) if reduced_state[l, i]] for l in range(2*N)]
+        where1_Z = [[i-n for i in range(n, 2*n) if reduced_state[l, i]] for l in range(2*N)]
+        
+        # create matrix with i positions
+        wherei = [[i for i in range(n) if reduced_state[l, i]&reduced_state[l, i+n]] for l in range(2*N)]
+        
+        # update state
+        for l in range(2*N):
+            minus_sign = 0
+            i_exp = len(wherei[l])
+            for q in range(n):
+                # update state
+                Xq_exp_list_alpha = [alpha[i,q] for i in where1_X[l]]
+                Xq_exp_list_gamma = [gamma[i,q] for i in where1_Z[l]]
+                state[l, qubits_list[q]] = sum(Xq_exp_list_alpha + Xq_exp_list_gamma)%2
+                
+                Zq_exp_list_beta = [beta[i,q] for i in where1_X[l]]
+                Zq_exp_list_delta = [delta[i,q] for i in where1_Z[l]]
+                state[l, qubits_list[q] + N] = sum(Zq_exp_list_beta + Zq_exp_list_delta)%2
+                
+                # update i exponent
+                alpha_and_beta = np.array(Xq_exp_list_alpha, dtype=np.int64) & np.array(Zq_exp_list_beta, dtype=np.int64)
+                gamma_and_delta = np.array(Xq_exp_list_gamma, dtype=np.int64) & np.array(Zq_exp_list_delta, dtype=np.int64)
+                i_exp += sum(alpha_and_beta) + sum(gamma_and_delta)
+                
+                if len(where1_X[l])>0:
+                    for betapos in where1_X[l]:
+                        alpha_to_sum = typed.List.empty_list(types.int64)
+                        [alpha_to_sum.append(alpha[pos, q]) for pos in where1_X[l] if pos > betapos]                    
+                        gamma_to_sum = typed.List.empty_list(types.int64)
+                        if len(where1_Z[l])>0:
+                            [gamma_to_sum.append(gamma[pos, q]) for pos in where1_Z[l] if pos >= betapos]
+                            
+                        minus_sign ^= beta[betapos, q] & (sum(alpha_to_sum) + sum(gamma_to_sum))%2
+                        
+                if len(where1_Z[l])>0:
+                    for deltapos in where1_Z[l]:
+                        gamma_to_sum = typed.List.empty_list(types.int64)
+                        [gamma_to_sum.append(gamma[pos, q]) for pos in where1_Z[l] if pos > deltapos]
+                        alpha_to_sum = typed.List.empty_list(types.int64)
+                        if len(where1_X[l])>0:
+                            [alpha_to_sum.append(alpha[pos, q]) for pos in where1_X[l] if pos > deltapos]
+
+                        minus_sign ^= delta[deltapos, q] & (sum(alpha_to_sum) + sum(gamma_to_sum))%2    
+                        
+            # create rs_list to sum        
+            r_list = [r[i] for i in where1_X[l]]
+            s_list = [s[i] for i in where1_Z[l]]
+            # update minus sign without considering i factors
+            minus_sign ^= (sum(r_list) + sum(s_list))%2
+            
+            # reabsorb i in all the stabilizers that have XZ
+            X_after = np.array([state[l, qubit] for qubit in qubits_list], dtype=np.int64)
+            Z_after = np.array([state[l, qubit+N] for qubit in qubits_list], dtype=np.int64)
+            i_exp -= sum(X_after & Z_after)
+            
+            # if i_exp%4 == 2:
+            #     minus_sign ^= 1
+            # elif i_exp%4 == 1 or i_exp%4 == 3:
+            #     raise RuntimeError("i factor is raised to the power of 1 or 3")
+            
+            state[l, 2*N] ^= minus_sign
+            
 
     def _Unew(self, qubits_list, matrices, vectors):
         
@@ -229,14 +320,14 @@ class StabilizerCircuit(StabilizerState):
         gamma = gi[0:2*n-1:2, 1:2*n:2].T
         delta = gi[1:2*n:2, 1:2*n:2].T
         
-        matrices = [alpha, beta, gamma, delta]
-        vectors = [r, s]
+        matrices = np.array([alpha, beta, gamma, delta], dtype=np.int64)
+        vectors = np.array([r, s], dtype = np.int64)
         
         dagger = params[3]
         if dagger:
             self._UdgNew(qubits_list, matrices, vectors)
         else:
-            self._Unew(qubits_list, matrices, vectors)
+            self._Unew_static(self.state, np.array(qubits_list, dtype=np.int64), matrices, vectors)
             
         
     def _measure(self, a):

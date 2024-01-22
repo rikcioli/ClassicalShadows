@@ -28,7 +28,7 @@ def fidelity(N_qubits, depth, N_shadows = 50, N_samples = 1000, save_results = T
     print("Running program with "+str(N_qubits)+" qubits, depth "+str(depth), flush=True)
     print("N_shadows = "+str(N_shadows)+", N_samples =", N_samples)
         
-    shadows = sc.saveShadows(N_shadows*N_samples, 8)      
+    shadows = sc.saveShadows(N_shadows*N_samples, depth)      
     random_circuits = shadows[0]
     outcomes = shadows[1]
         
@@ -48,7 +48,7 @@ def fidelity(N_qubits, depth, N_shadows = 50, N_samples = 1000, save_results = T
     err = np.sqrt(np.var(fid_per_sample)/N_samples)
     
     if save_results:
-        savetxt('Results/Fidelity/GHZ 4Q 50Sh/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_fidelity_per_sample_depth8.csv', fid_per_sample, delimiter=',')
+        savetxt('Results/Fidelity/GHZ 4Q 50Sh Opt/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_fidelity_per_sample.csv', fid_per_sample, delimiter=',')
         #savetxt('Results/Fidelity/4Q 50Sh/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_fid_persample_pershadow.csv', np.array(fid_per_sample_per_shadow), delimiter=',')
     
     return [fid, err]
@@ -58,7 +58,7 @@ if __name__ == '__main__':
 
     N_qubits = 4
     min_depth = 1
-    max_depth = 11
+    max_depth = 20
     
     save_results = True
     if not save_results:

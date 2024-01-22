@@ -15,10 +15,10 @@ for N_qubits in range(4, 6, 2):
     sdomfid_per_depth = []
     N_shadows = 50
     N_samples = 1000
-    depths = [i for i in range(1, 5)]
+    depths = [i for i in range(1, 6)]
     for depth in depths:
         # load array
-        fid_per_sample = np.loadtxt('Results/Fidelity/GHZ 4Q 50Sh/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_fidelity_per_sample_depth8.csv', delimiter=',')
+        fid_per_sample = np.loadtxt('Results/Fidelity/GHZ 4Q 50Sh Opt/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_fidelity_per_sample.csv', delimiter=',')
         avgfid_per_depth.append(np.mean(fid_per_sample))
         sdomfid_per_depth.append(np.sqrt(np.var(fid_per_sample)/N_samples))
     

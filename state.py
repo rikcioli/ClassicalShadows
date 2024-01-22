@@ -14,7 +14,7 @@ class StabilizerState():
     def __init__(self, N_qubits, state = None):
         self._N = N_qubits
         if state is None:
-            self._state = np.eye(2*N_qubits, 2*N_qubits+1, 0, dtype=int)
+            self._state = np.eye(2*N_qubits, 2*N_qubits+1, 0, dtype=np.int64)
         else:
             self._state = state.copy()
         
@@ -61,14 +61,6 @@ class StabilizerState():
         self.state[h] = self._sum_rows(self.state[h], self.state[i])    #update h row as sum of i and h rows
         
 
-    def _fullrank_X(self):
-        # Applies hadamards to make X matrix have full rank
-        gauss_X = self._gauss_elim(self.state[self.N:2*self.N, 0:self.N].copy())
-        qubits = [i for i in range(self.N) if gauss_X[i,i] == 0]
-        [self.H(a) for a in qubits]
-        
-        return qubits
-
     def _is_valid_state(self, state = None):
         if state is None:
             state = self.state
@@ -80,7 +72,6 @@ class StabilizerState():
             return False
         else:
             return True
-    
     
     def gauss_elim_stab(self, state_stabs):
         """Given lower part of state table matrix returns gaussian eliminated version 
