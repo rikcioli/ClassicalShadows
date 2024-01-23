@@ -15,7 +15,7 @@ from multiprocessing import Pool
 from timeit import default_timer as timer
 
 
-def fidelity(N_qubits, depth, N_shadows = 50, N_samples = 1000, save_results = True):
+def fidelity(N_qubits, depth, N_shadows = 50, N_samples = 4000, save_results = True):
     
     sc = StabilizerCircuit(N_qubits)
 
@@ -67,7 +67,7 @@ if __name__ == '__main__':
     # with Pool(4) as pool:
         # results = pool.starmap(fidelity, [(N_qubits, depth) for depth in range(min_depth, max_depth+1)]) 
     
-    results = fidelity(N_qubits, depth=2, N_shadows=50, N_samples=1000, save_results=False)
+    results = fidelity(N_qubits, depth=15, N_shadows=50, N_samples=1000, save_results=False)
     
     print("\n", results)
     

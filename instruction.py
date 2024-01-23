@@ -29,6 +29,14 @@ class Instruction():
     @property
     def qubits(self):
         return self._qubits
+    
+    def __repr__(self):
+        return (
+            f"{type(self).__name__}("
+            f"operation={self.name!r}"
+            f", qubits={self.qubits!r}"
+            ")"
+        )
 
 
 class RandomClifford(Instruction):

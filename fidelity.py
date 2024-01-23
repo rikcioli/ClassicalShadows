@@ -77,9 +77,9 @@ def fidelity_vs_depth(N_qubits, max_depth, N_shadows = 50, N_samples = 1000, sav
 
 if __name__ == '__main__':
 
-    max_depth = 10
+    max_depth = 20
     min_qubits = 6
-    max_qubits = 12
+    max_qubits = 10
     
     avgfid_per_N_qubits = []
     sdomfid_per_N_qubits = []
