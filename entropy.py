@@ -63,7 +63,7 @@ for depth in range(1, 5):
         for sample_number in tqdm.tqdm(range(N_samples), desc="Evaluating "+str(N_shadows)+" shadows with "+str(N_samples)+ " samples..."):
             
             # Extract classical shadows     
-            shadows = sc.saveShadowsGlobal(N_shadows)
+            shadows = sc.saveShadows(N_shadows, depth)
             random_circuits = shadows[0]
             outcomes = shadows[1]
             

@@ -141,8 +141,8 @@ class StabilizerState():
             return 0
         else:       # else expval is +1 or -1, sign must be determined as in measure
             skew_with_destabs = [self.skew_product(stabilizer, state[i][:2*self.N]) for i in range(self.N)]
-            positions = [i for i in range(self.N) if skew_with_destabs[i] == 1]
-            extra_row = np.zeros([2*self.N+1], dtype=int)
+            positions = [i for i in range(self.N) if skew_with_destabs[i]]
+            extra_row = np.zeros([2*self.N+1], dtype=np.int64)
             for i in positions:
                 extra_row = self._sum_rows(extra_row, self.state[i+self.N])
             r_extra = extra_row[2*self.N]

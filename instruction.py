@@ -16,8 +16,7 @@ class Instruction():
 
         Args:
             name (str): instruction name
-            qubits (list): qubits involved in the instruction, either a list
-            of int or a list of tuples
+            qubits (list): qubits involved in the instruction
         """
         self._name = name
         self._qubits = qubits_list
@@ -33,13 +32,15 @@ class Instruction():
     def __repr__(self):
         return (
             f"{type(self).__name__}("
-            f"operation={self.name!r}"
+            f"name={self.name!r}"
             f", qubits={self.qubits!r}"
             ")"
         )
 
 
 class RandomClifford(Instruction):
+    
+    rng = random.Random()
     
     def __init__(self, name, qubits_list, params = None):
         super().__init__(name, qubits_list)
@@ -52,11 +53,11 @@ class RandomClifford(Instruction):
             for j in range(1, n+1):
                 prod *= 4**j-1
             dim_symplectic = prod*2**(n*n)
-            index_symplectic = random.randint(0, dim_symplectic-1)
-            r_int = random.randint(0, 2**n - 1)
-            s_int = random.randint(0, 2**n - 1)
+            index_symplectic = self.rng.randint(0, dim_symplectic-1)
+            r_int = self.rng.randint(0, 2**n - 1)
+            s_int = self.rng.randint(0, 2**n - 1)
             inverse = False
-            params = [index_symplectic, r_int, s_int, inverse]
+            params = (index_symplectic, r_int, s_int, inverse)
         
         self._params = params   
     
@@ -72,10 +73,18 @@ class RandomClifford(Instruction):
     def params(self, param_list):
         self._params = param_list.copy()
     
+    def __repr__(self):
+        return (
+            f"{type(self).__name__}("
+            f"qubits={self.qubits!r}"
+            f", params={self.params!r}"
+            ")"
+        )
+    
     def index_to_matrix(self):
         return sp.symplectic_n3(self.num_qubits, self.params[0])
     
     def dagger(self):
-        self.params[3] = True
+        self.params = (self.params[0], self.params[1], self.params[2], 1^self.params[3])
         
     

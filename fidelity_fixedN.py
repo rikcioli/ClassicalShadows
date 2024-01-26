@@ -11,11 +11,12 @@ import matplotlib.pyplot as plt
 import tqdm
 from numpy import savetxt
 from multiprocessing import Pool
+import multiprocessing, logging
 
 from timeit import default_timer as timer
 
 
-def fidelity(N_qubits, depth, N_shadows = 50, N_samples = 4000, save_results = True):
+def fidelity(N_qubits, depth, N_shadows = 50, N_samples = 10000, save_results = True):
     
     sc = StabilizerCircuit(N_qubits)
 
@@ -42,13 +43,13 @@ def fidelity(N_qubits, depth, N_shadows = 50, N_samples = 4000, save_results = T
         [[Uphi_states[r].X(i) for i in range(N_qubits) if outcomes_current_sample[r][i]] for r in range(N_shadows)]
         [state.run() for state in Uphi_states]
         
-        fid_per_sample[sample_number] = sum((2**N_qubits+1)*(state.dot_zero())**2 for state in Uphi_states)/N_shadows - 1
+        fid_per_sample[sample_number] = (2**N_qubits+1)*sum((state.dot_zero())**2 for state in Uphi_states)/N_shadows - 1
         
     fid = np.mean(fid_per_sample)     # CAN ALSO BE REPLACED BY MEDIAN
     err = np.sqrt(np.var(fid_per_sample)/N_samples)
     
     if save_results:
-        savetxt('Results/Fidelity/GHZ 4Q 50Sh Opt/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_fidelity_per_sample.csv', fid_per_sample, delimiter=',')
+        savetxt('Results/Fidelity/GHZ 4Q 10000S/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_fidelity_per_sample.csv', fid_per_sample, delimiter=',')
         #savetxt('Results/Fidelity/4Q 50Sh/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_fid_persample_pershadow.csv', np.array(fid_per_sample_per_shadow), delimiter=',')
     
     return [fid, err]
@@ -60,14 +61,16 @@ if __name__ == '__main__':
     min_depth = 1
     max_depth = 20
     
-    save_results = True
-    if not save_results:
-        print("WARNING: save_results set to False", flush=True)
+    # save_results = True
+    # if not save_results:
+    #     print("WARNING: save_results set to False", flush=True)
     
-    # with Pool(4) as pool:
-        # results = pool.starmap(fidelity, [(N_qubits, depth) for depth in range(min_depth, max_depth+1)]) 
+    with Pool(4) as pool:
+        results = pool.starmap(fidelity, [(N_qubits, depth) for depth in range(min_depth, max_depth+1)]) 
     
-    results = fidelity(N_qubits, depth=15, N_shadows=50, N_samples=1000, save_results=False)
+    # results = [fidelity(N_qubits, depth, N_samples=1000, save_results=False) for depth in range(min_depth, max_depth+1)]
+    
+    # results = fidelity(N_qubits, depth=16, N_shadows=50, N_samples=3000, save_results=False)
     
     print("\n", results)
     

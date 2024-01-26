@@ -18,17 +18,21 @@ N_qubits = 4
 
 sc = StabilizerCircuit(N_qubits)
 
-
 sc.H(0)
-sc.CNOT(0, 1)
+[sc.CNOT(i, i+1) for i in range(N_qubits-1)]
 sc.run()
 print(sc.state)
 sc.circuit = []
 
-sc.randClifford([0,1])
-sc.randClifford([2,3])
-sc.randClifford([1,0])
-sc.randClifford([3,2])
+# sc.randClifford([0,1])
+# sc.randClifford([2,3])
+# sc.randClifford([0,2])
+# sc.randClifford([1,3])
+# sc.circuit[0].params = [381, 2, 0, False]
+# sc.circuit[1].params = [585, 3, 2, False]
+# sc.circuit[2].params = [306, 2, 2, False]
+# sc.circuit[3].params = [45, 3, 1, False]
+sc.randEvolution(8)
 sc.run()
 print(sc.state)
 

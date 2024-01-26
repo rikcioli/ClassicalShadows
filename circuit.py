@@ -18,6 +18,8 @@ from numba import njit, types, typed
 
 class StabilizerCircuit(StabilizerState):
     
+    rng = random.Random()
+    
     def __init__(self, N_qubits, state = None, circuit = None):
         super().__init__(N_qubits, state)
         if circuit is None:
@@ -34,7 +36,7 @@ class StabilizerCircuit(StabilizerState):
         self._circuit = copy.deepcopy(circuit)
         
     def reset_state(self):
-        self._state = np.eye(2*self.N, 2*self.N+1, 0, dtype=int)
+        self._state = np.eye(2*self.N, 2*self.N+1, 0, dtype=np.int64)
     
     def reset_circuit(self):
         self._circuit = []
@@ -55,6 +57,8 @@ class StabilizerCircuit(StabilizerState):
         self.state[:, self.N+a] = zcol_a^zcol_b      # WARN: value of zcol_a = state[:, N+a] changed after this line
     
     def _H(self, a):
+        if not isinstance(a, int):
+            a = a[0]
         vec_r = self.state[:, 2*self.N]
         xcol_a = self.state[:, a].copy()    # Necessary copy, pointers are not enough
         zcol_a = self.state[:, self.N+a]
@@ -64,6 +68,8 @@ class StabilizerCircuit(StabilizerState):
         self.state[:, self.N+a] = xcol_a
     
     def _S(self, a):
+        if not isinstance(a, int):
+            a = a[0]
         vec_r = self.state[:, 2*self.N]
         xcol_a = self.state[:, a]
         zcol_a = self.state[:, self.N+a]
@@ -72,6 +78,8 @@ class StabilizerCircuit(StabilizerState):
         self.state[:, self.N+a] = xcol_a^zcol_a
         
     def _X(self, a):
+        if not isinstance(a, int):
+            a = a[0]
         vec_r = self.state[:, 2*self.N]
         zcol_a = self.state[:, self.N+a]
         
@@ -160,13 +168,11 @@ class StabilizerCircuit(StabilizerState):
             Z_after = np.array([state[l, qubit+N] for qubit in qubits_list], dtype=np.int64)
             i_exp -= sum(X_after & Z_after)
             
-            # if i_exp%4 == 2:
-            #     minus_sign ^= 1
-            # elif i_exp%4 == 1 or i_exp%4 == 3:
-            #     raise RuntimeError("i factor is raised to the power of 1 or 3")
+            if i_exp%4 == 2:
+                minus_sign ^= 1
             
             state[l, 2*N] ^= minus_sign
-            
+    
 
     def _Unew(self, qubits_list, matrices, vectors):
         
@@ -182,10 +188,10 @@ class StabilizerCircuit(StabilizerState):
         r = vectors[0]
         s = vectors[1]
         
-        conversion_dict = dict(enumerate(qubits_list))
+        # conversion_dict = dict(enumerate(qubits_list))
         
         # reduce and REMAP state
-        reduced_state = np.empty([2*self.N, 2*n+1], dtype = int)
+        reduced_state = np.empty((2*self.N, 2*n+1), dtype = np.int64)
         for order_i, i in enumerate(qubits_list):
             reduced_state[:, order_i] = self.state[:, i]
             reduced_state[:, order_i + n] = self.state[:, i + self.N]
@@ -207,11 +213,11 @@ class StabilizerCircuit(StabilizerState):
                 # update state
                 Xq_exp_list_alpha = [alpha[i,q] for i in where1_X[l]]
                 Xq_exp_list_gamma = [gamma[i,q] for i in where1_Z[l]]
-                self.state[l, conversion_dict[q]] = sum(Xq_exp_list_alpha + Xq_exp_list_gamma)%2
+                self.state[l, qubits_list[q]] = sum(Xq_exp_list_alpha + Xq_exp_list_gamma)%2
                 
                 Zq_exp_list_beta = [beta[i,q] for i in where1_X[l]]
                 Zq_exp_list_delta = [delta[i,q] for i in where1_Z[l]]
-                self.state[l, conversion_dict[q] + self.N] = sum(Zq_exp_list_beta + Zq_exp_list_delta)%2
+                self.state[l, qubits_list[q] + self.N] = sum(Zq_exp_list_beta + Zq_exp_list_delta)%2
                 
                 # update i exponent
                 alpha_and_beta = np.array(Xq_exp_list_alpha, dtype=int) & np.array(Zq_exp_list_beta, dtype=int)
@@ -221,18 +227,18 @@ class StabilizerCircuit(StabilizerState):
                 if len(where1_X[l])>0:
                     for betapos in where1_X[l]:
                         alpha_to_sum = [alpha[pos,q] for pos in where1_X[l] if pos > betapos]
+                        gamma_to_sum = []
                         if len(where1_Z[l])>0:
                             gamma_to_sum = [gamma[pos, q] for pos in where1_Z[l] if pos >= betapos]
-                        else:
-                            gamma_to_sum = []
+
                         minus_sign ^= beta[betapos, q] & sum(alpha_to_sum + gamma_to_sum)%2
                 if len(where1_Z[l])>0:
                     for deltapos in where1_Z[l]:
                         gamma_to_sum = [gamma[pos, q] for pos in where1_Z[l] if pos > deltapos]
+                        alpha_to_sum = []
                         if len(where1_X[l])>0:
                             alpha_to_sum = [alpha[pos, q] for pos in where1_X[l] if pos > deltapos]
-                        else:
-                            alpha_to_sum = []
+
                         minus_sign ^= delta[deltapos, q] & sum(alpha_to_sum + gamma_to_sum)%2    
             # create rs_list to sum        
             rs_list = [r[i] for i in where1_X[l]]
@@ -263,12 +269,12 @@ class StabilizerCircuit(StabilizerState):
         self.reset_state()
         
         # first apply Udg with null r and s
-        vectors_dagger = [np.zeros(n, dtype=int), np.zeros(n, dtype=int)]
+        vectors_dagger = np.array([np.zeros(n, dtype=np.int64), np.zeros(n, dtype=np.int64)], dtype=np.int64)
         matrices_dagger = self._findDagger(matrices)
-        self._Unew(qubits_list, matrices_dagger, vectors_dagger)
+        self._Unew_static(self.state, qubits_list, matrices_dagger, vectors_dagger)
         
         # then apply U and save sign changes
-        self._Unew(qubits_list, matrices, vectors)
+        self._Unew_static(self.state, qubits_list, matrices, vectors)
         minus_signs = self.state[:, 2*self.N]
         
         for order_i, i in enumerate(qubits_list):
@@ -276,7 +282,7 @@ class StabilizerCircuit(StabilizerState):
             vectors_dagger[1][order_i] = minus_signs[i+self.N]
         
         self.state = current_state
-        self._Unew(qubits_list, matrices_dagger, vectors_dagger)
+        self._Unew_static(self.state, qubits_list, matrices_dagger, vectors_dagger)
         
             
     def _findDagger(self, matrices):
@@ -289,13 +295,13 @@ class StabilizerCircuit(StabilizerState):
         gamma = matrices[2]
         delta = matrices[3]
         
-        M = np.zeros([2*n, 2*n], dtype=int)
+        M = np.zeros([2*n, 2*n], dtype=np.int64)
         M[0:n, 0:n] = alpha
         M[0:n, n:2*n] = beta
         M[n:2*n, 0:n] = gamma
         M[n:2*n, n:2*n] = delta
         M_inv = modMatInv(M, 2)
-        matrices_dagger = [M_inv[0:n, 0:n], M_inv[0:n, n:2*n], M_inv[n:2*n, 0:n], M_inv[n:2*n, n:2*n]]
+        matrices_dagger = np.array([M_inv[0:n, 0:n], M_inv[0:n, n:2*n], M_inv[n:2*n, 0:n], M_inv[n:2*n, n:2*n]], dtype=np.int64)
       
         return matrices_dagger
     
@@ -310,6 +316,7 @@ class StabilizerCircuit(StabilizerState):
         
         """
         n = len(qubits_list)
+        qubits_list = np.array(qubits_list, dtype=np.int64)
         index_sp = params[0]
         r = np.array([(params[1]>>j) % 2 for j in range(n)])
         s = np.array([(params[2]>>j) % 2 for j in range(n)])
@@ -327,10 +334,13 @@ class StabilizerCircuit(StabilizerState):
         if dagger:
             self._UdgNew(qubits_list, matrices, vectors)
         else:
-            self._Unew_static(self.state, np.array(qubits_list, dtype=np.int64), matrices, vectors)
+            # self._Unew(qubits_list, matrices, vectors)
+            self._Unew_static(self.state, qubits_list, matrices, vectors)
             
         
     def _measure(self, a):
+        if not isinstance(a, int):
+            a = a[0]
         xa_positions = np.where(self.state[:, a] == 1)[0]     #save position of all stab and destab that do not commute with Z_a
         p = xa_positions[-1]
         if p >= self.N:      #if any stab does not commute with measure, state needs to be updated
@@ -338,7 +348,7 @@ class StabilizerCircuit(StabilizerState):
             self.state[p-self.N] = self.state[p].copy()          #set (p-n)th row equal to p, moving the non commuting stab to destabs
             self.state[p] = np.zeros([2*self.N+1])          #set p-th row to all zeros except 1 in position N+a (the current measurement stabilizer)
             self.state[p, self.N+a] = 1
-            rp = random.randint(0,1)
+            rp = self.rng.randint(0,1)
             self.state[p, 2*self.N] = rp
             return rp
         else:
@@ -352,7 +362,7 @@ class StabilizerCircuit(StabilizerState):
     def CNOT(self, a, b):
         if a >= self.N or b>= self.N:
             raise RuntimeError("target qubits exceed N_qubits")
-        cnot = Instruction('CNOT', [(a, b)])
+        cnot = Instruction('CNOT', [a, b])
         self.circuit.append(cnot)
     
     def H(self, a):
@@ -388,7 +398,7 @@ class StabilizerCircuit(StabilizerState):
     def randEvolution(self, depth):
         qubits = [i for i in range(self.N)]
         for layer in range(depth):
-            random.shuffle(qubits)
+            self.rng.shuffle(qubits)
             pairs = [qubits[2*i:2*(i+1)] for i in range(len(qubits)//2)]
             for pair in pairs:
                 self.randClifford(pair)
@@ -413,7 +423,7 @@ class StabilizerCircuit(StabilizerState):
                     
                 else:
                     func_to_call = getattr(StabilizerCircuit, '_'+gate.name)
-                    [func_to_call(self, target) for target in gate.qubits]
+                    func_to_call(self, gate.qubits)
             
         if is_measured == True:  
             return counts
