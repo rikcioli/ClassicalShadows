@@ -102,13 +102,111 @@ class StabilizerState():
                 j += 1
         
         return M
+    
+    def RREF(self, state = None):
+        if state is None:
+            state = self.state
+        
+        X = state[self.N:, :self.N]
+        Z = state[self.N:, self.N:2*self.N]
+        m, n = X.shape
+        i, j = 0, 0
+        
+        while i < m and j < n:
+            # find all the paulis in col j
+            paulis = [[l, (X[l, j], Z[l, j])] for l in range(i, m) if X[l, j] or Z[l, j]]
+            
+            if len(paulis) == 0:    #case a
+                j += 1
+            else:
+                first_pauli = paulis[0]
+                found_second = False
+                for pauli in paulis[1:]:  
+                    if pauli[1] != first_pauli[1]:
+                        found_second = True
+                        second_pauli = pauli
+                        break
+                if not found_second:    #case b
+                    pos = first_pauli[0]
+                    if pos > i:
+                        # swap rows
+                        destab_i = state[i].copy()
+                        stab_i = state[i+self.N].copy()
+                        state[i] = state[pos]
+                        state[i+self.N] = state[pos+self.N]
+                        state[pos] = destab_i
+                        state[pos+self.N] = stab_i
+                    # rowsum over all rows with same pauli in col j
+                    for k in range(i+1, m):
+                        type_k = (X[k, j], Z[k, j])
+                        if type_k == first_pauli[1]:
+                            # multiply stab row by first pauli stab row, first pauli destab row by destab row
+                            state[k+self.N] = self._sum_rows(state[k+self.N], state[i+self.N])
+                            state[i] = self._sum_rows(state[i], state[k])
+                    i += 1
+                    j += 1
+                else:   #case c
+                    pair = [first_pauli, second_pauli]
+                    stab_done = [pauli for pauli in pair if pauli[0] == i or pauli[0] == i+1]
+                    stab_todo = (pauli for pauli in pair if pauli[0] > i+1)
+                    for stab in stab_todo:
+                        pos = stab[0]
+                        target_row = i
+                        if len(stab_done) > 0:
+                            if stab_done[0][0] == i:
+                                target_row = i+1
+   
+                        # swap rows
+                        destab_target_row = state[target_row].copy()
+                        stab_target_row = state[target_row+self.N].copy()
+                        state[target_row] = state[pos]
+                        state[target_row+self.N] = state[pos+self.N]
+                        state[pos] = destab_target_row
+                        state[pos+self.N] = stab_target_row
+                        
+                        pauli_after = [target_row, stab[1]]
+                        stab_done.append(pauli_after)
+                        
+                    stab_done.sort()
+                    # rowsum over all rows with same pauli in col j
+                    for k in range(i+2, m):
+                        type_k = (X[k, j], Z[k, j])  
+                        if type_k != (0, 0):
+                            if type_k == stab_done[0][1]:
+                                state[k+self.N] = self._sum_rows(state[k+self.N], state[stab_done[0][0]+self.N])
+                                state[stab_done[0][0]] = self._sum_rows(state[stab_done[0][0]], state[k])                                                  
+                            elif type_k == stab_done[1][1]:
+                                state[k+self.N] = self._sum_rows(state[k+self.N], state[stab_done[1][0]+self.N])
+                                state[stab_done[1][0]] = self._sum_rows(state[stab_done[1][0]], state[k])                              
+                            else:
+                                state[k+self.N] = self._sum_rows(state[k+self.N], state[stab_done[0][0]+self.N])
+                                state[stab_done[0][0]] = self._sum_rows(state[stab_done[0][0]], state[k])
+                                state[k+self.N] = self._sum_rows(state[k+self.N], state[stab_done[1][0]+self.N])
+                                state[stab_done[1][0]] = self._sum_rows(state[stab_done[1][0]], state[k])
+                    i += 2
+                    j += 1
+        return
+        
+    
+    def overlap(self, state1, state2):
+        pass
+        
+    def CNF1(self, state = None):
+        if state is None:
+            state = self.state
+        
+        # pick only the stabilizers
+        state = state[self.N:]
+        pass
+        
+        
         
     def dot_zero(self, state = None):
         # returns overlap with |0> state |<0|\psi>|
         if state is None:
             state = self.state
         state = self.gauss_elim_stab(state[self.N:])
-        X_matrix = state[:, :self.N]
+        X_matrix = state[:, 0:self.N]
         vec_r = state[:, 2*self.N]
         
         s = 0

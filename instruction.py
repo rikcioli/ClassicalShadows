@@ -11,7 +11,7 @@ import symplectic as sp
 
 class Instruction():
     
-    def __init__(self, name, qubits_list):
+    def __init__(self, name, qubits):
         """Create a new instruction       
 
         Args:
@@ -19,7 +19,7 @@ class Instruction():
             qubits (list): qubits involved in the instruction
         """
         self._name = name
-        self._qubits = qubits_list
+        self._qubits = qubits
         
     @property
     def name(self):
@@ -28,6 +28,10 @@ class Instruction():
     @property
     def qubits(self):
         return self._qubits
+    
+    @qubits.setter
+    def qubits(self, qubits):
+        self._qubits = qubits
     
     def __repr__(self):
         return (
@@ -57,7 +61,8 @@ class RandomClifford(Instruction):
             r_int = self.rng.randint(0, 2**n - 1)
             s_int = self.rng.randint(0, 2**n - 1)
             inverse = False
-            params = (index_symplectic, r_int, s_int, inverse)
+            conj = False
+            params = (index_symplectic, r_int, s_int, inverse, conj)
         
         self._params = params   
     
@@ -70,8 +75,8 @@ class RandomClifford(Instruction):
         return self._params
     
     @params.setter
-    def params(self, param_list):
-        self._params = param_list.copy()
+    def params(self, params):
+        self._params = tuple(params)
     
     def __repr__(self):
         return (
@@ -85,6 +90,9 @@ class RandomClifford(Instruction):
         return sp.symplectic_n3(self.num_qubits, self.params[0])
     
     def dagger(self):
-        self.params = (self.params[0], self.params[1], self.params[2], 1^self.params[3])
+        self.params = (self.params[0], self.params[1], self.params[2], True^self.params[3], self.params[4])
+        
+    def conj(self):
+        self.params = (self.params[0], self.params[1], self.params[2], self.params[3], True^self.params[4])
         
     

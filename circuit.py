@@ -88,7 +88,7 @@ class StabilizerCircuit(StabilizerState):
         
     @staticmethod
     @njit(cache=True)
-    def _Unew_static(state, qubits_list, matrices, vectors):
+    def _Unew_static(state, qubits_list, matrices, vectors, conj):
         
         n = len(qubits_list)  # dim of the subspace on which U is acting non trivially
         N = len(state)//2   # total number of qubits
@@ -122,6 +122,7 @@ class StabilizerCircuit(StabilizerState):
         for l in range(2*N):
             minus_sign = 0
             i_exp = len(wherei[l])
+            if conj: i_exp += 2*(i_exp%2)
             for q in range(n):
                 # update state
                 Xq_exp_list_alpha = [alpha[i,q] for i in where1_X[l]]
@@ -166,6 +167,7 @@ class StabilizerCircuit(StabilizerState):
             # reabsorb i in all the stabilizers that have XZ
             X_after = np.array([state[l, qubit] for qubit in qubits_list], dtype=np.int64)
             Z_after = np.array([state[l, qubit+N] for qubit in qubits_list], dtype=np.int64)
+            if conj: i_exp += 2*(i_exp%2)
             i_exp -= sum(X_after & Z_after)
             
             if i_exp%4 == 2:
@@ -174,7 +176,7 @@ class StabilizerCircuit(StabilizerState):
             state[l, 2*N] ^= minus_sign
     
 
-    def _Unew(self, qubits_list, matrices, vectors):
+    def _Unew(self, qubits_list, matrices, vectors, conj):
         
         n = len(qubits_list)  # dim of the subspace on which U is acting non trivially
         if n > self.N:
@@ -209,6 +211,7 @@ class StabilizerCircuit(StabilizerState):
         for l in range(2*self.N):
             minus_sign = 0
             i_exp = len(wherei[l])
+            if conj: i_exp += 2*(i_exp%2)
             for q in range(n):
                 # update state
                 Xq_exp_list_alpha = [alpha[i,q] for i in where1_X[l]]
@@ -249,6 +252,7 @@ class StabilizerCircuit(StabilizerState):
             # reabsorb i in all the stabilizers that have XZ
             X_after = np.array([self.state[l, qubit] for qubit in qubits_list], dtype=int)
             Z_after = np.array([self.state[l, qubit+self.N] for qubit in qubits_list], dtype=int)
+            if conj: i_exp += 2*(i_exp%2)
             i_exp -= sum(X_after & Z_after)
             
             if i_exp%4 == 2:
@@ -259,7 +263,7 @@ class StabilizerCircuit(StabilizerState):
             self.state[l, 2*self.N] ^= minus_sign
     
 
-    def _UdgNew(self, qubits_list, matrices, vectors):
+    def _UdgNew(self, qubits_list, matrices, vectors, conj):
         
         n = len(qubits_list)  # dim of the subspace on which U is acting non trivially
         if n > self.N:
@@ -271,10 +275,10 @@ class StabilizerCircuit(StabilizerState):
         # first apply Udg with null r and s
         vectors_dagger = np.array([np.zeros(n, dtype=np.int64), np.zeros(n, dtype=np.int64)], dtype=np.int64)
         matrices_dagger = self._findDagger(matrices)
-        self._Unew_static(self.state, qubits_list, matrices_dagger, vectors_dagger)
+        self._Unew_static(self.state, qubits_list, matrices_dagger, vectors_dagger, conj)
         
         # then apply U and save sign changes
-        self._Unew_static(self.state, qubits_list, matrices, vectors)
+        self._Unew_static(self.state, qubits_list, matrices, vectors, conj)
         minus_signs = self.state[:, 2*self.N]
         
         for order_i, i in enumerate(qubits_list):
@@ -282,7 +286,7 @@ class StabilizerCircuit(StabilizerState):
             vectors_dagger[1][order_i] = minus_signs[i+self.N]
         
         self.state = current_state
-        self._Unew_static(self.state, qubits_list, matrices_dagger, vectors_dagger)
+        self._Unew_static(self.state, qubits_list, matrices_dagger, vectors_dagger, conj)
         
             
     def _findDagger(self, matrices):
@@ -329,13 +333,12 @@ class StabilizerCircuit(StabilizerState):
         
         matrices = np.array([alpha, beta, gamma, delta], dtype=np.int64)
         vectors = np.array([r, s], dtype = np.int64)
-        
         dagger = params[3]
+        conj = params[4]
         if dagger:
-            self._UdgNew(qubits_list, matrices, vectors)
+            self._UdgNew(qubits_list, matrices, vectors, conj)
         else:
-            # self._Unew(qubits_list, matrices, vectors)
-            self._Unew_static(self.state, qubits_list, matrices, vectors)
+            self._Unew_static(self.state, qubits_list, matrices, vectors, conj)
             
         
     def _measure(self, a):

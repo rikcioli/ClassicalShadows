@@ -71,7 +71,7 @@ def confidence_interval(N_qubits = 2, N_shadows = 50, N_samples = 100, depth = 1
 # print(results)
 
 # insert EVEN number of qubits    
-N_qubits = 2
+N_qubits = 4
 depth = 1
 
 N_samples_list = [1000 for i in range(1, 11)]
@@ -84,8 +84,9 @@ for N_samples in tqdm.tqdm(N_samples_list):
     exp_values = []
     for i in range(N_shadows*N_samples):
         sc = StabilizerCircuit(N_qubits)
-        sc.randClifford([0,1])
+        sc.randClifford([0,1,2,3])
         sc.run()
+        sc.RREF()
         exp_values.append(sc.expval(paulis[1]))
     
     expval_per_sample = [np.mean(exp_values[sample_num*N_shadows : (sample_num+1)*N_shadows], 0) for sample_num in range(N_samples)]  

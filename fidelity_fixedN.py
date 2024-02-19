@@ -58,14 +58,14 @@ def fidelity(N_qubits, depth, N_shadows = 50, N_samples = 10000, save_results = 
 if __name__ == '__main__':
 
     N_qubits = 4
-    min_depth = 1
+    min_depth = 4
     max_depth = 20
     
     # save_results = True
     # if not save_results:
     #     print("WARNING: save_results set to False", flush=True)
     
-    with Pool(4) as pool:
+    with Pool() as pool:
         results = pool.starmap(fidelity, [(N_qubits, depth) for depth in range(min_depth, max_depth+1)]) 
     
     # results = [fidelity(N_qubits, depth, N_samples=1000, save_results=False) for depth in range(min_depth, max_depth+1)]

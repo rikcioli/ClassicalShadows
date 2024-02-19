@@ -28,11 +28,12 @@ sc.circuit = []
 # sc.randClifford([2,3])
 # sc.randClifford([0,2])
 # sc.randClifford([1,3])
-# sc.circuit[0].params = [381, 2, 0, False]
-# sc.circuit[1].params = [585, 3, 2, False]
-# sc.circuit[2].params = [306, 2, 2, False]
-# sc.circuit[3].params = [45, 3, 1, False]
-sc.randEvolution(8)
+# sc.circuit[0].params = [381, 2, 0, False, True]
+# sc.circuit[1].params = [585, 3, 2, False, False]
+# sc.circuit[2].params = [306, 2, 2, False, False]
+# sc.circuit[3].params = [45, 3, 1, False, False]
+sc.randClifford([0,1,2,3])
+[gate.conj() for gate in sc.circuit]
 sc.run()
 print(sc.state)
 
