@@ -37,6 +37,14 @@ class StabilizerState():
         self._state = input_state.copy()
         
     @staticmethod
+    def trace(stab1, stab2):
+        N = len(stab1)//2
+        if 1 in stab1^stab2:
+            return 0
+        else:
+            return 2**N
+        
+    @staticmethod
     @njit(cache=True)
     def _sum_rows(row_h, row_i):
         # given two rows h and i of 2*N+1 elements, returns h+i with correct rh
@@ -187,19 +195,6 @@ class StabilizerState():
                     j += 1
         return
         
-    
-    def overlap(self, state1, state2):
-        pass
-        
-    def CNF1(self, state = None):
-        if state is None:
-            state = self.state
-        
-        # pick only the stabilizers
-        state = state[self.N:]
-        pass
-        
-        
         
     def dot_zero(self, state = None):
         # returns overlap with |0> state |<0|\psi>|
@@ -246,7 +241,6 @@ class StabilizerState():
             r_extra = extra_row[2*self.N]
             return (-1)**r_extra
             
-        
 
                    
 

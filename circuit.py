@@ -393,9 +393,11 @@ class StabilizerCircuit(StabilizerState):
         self.circuit.append(meas)
         
     def randClifford(self, qubits_list):
+        if isinstance(qubits_list, int):
+            qubits_list = [qubits_list]
         if max(qubits_list) >= self.N:
             raise RuntimeError("target qubits exceed N_qubits")
-        cliff = RandomClifford('random_clifford', qubits_list)
+        cliff = RandomClifford(qubits_list)
         self.circuit.append(cliff)
         
     def randEvolution(self, depth):
@@ -406,6 +408,13 @@ class StabilizerCircuit(StabilizerState):
             for pair in pairs:
                 self.randClifford(pair)
                 
+    def randEvolutionBH(self, N_gates):
+        qubits = [i for i in range(self.N)]
+        for layer in range(N_gates):
+            self.rng.shuffle(qubits)
+            pair = [qubits[0], qubits[1]]
+            self.randClifford(pair)
+        
     
     def run(self, shots = 1):
         initial_state = self.state.copy()
@@ -508,6 +517,69 @@ class StabilizerCircuit(StabilizerState):
         self.circuit = saved_circ
         
         return [random_circuits, outcomes]
+    
+    def saveShadowsMixed(self, N_shadows, depth):
+        
+        saved_circ = self.circuit.copy()
+        saved_state = self.state.copy()
+        
+        random_circuits = []
+        outcomes = []
+        
+        for i in range(N_shadows):
+            self.reset_circuit()          
+            # layer of single-site measurements
+            [self.randClifford(a) for a in range(self.N)]
+            # random evolution
+            self.randEvolution(depth)
+            # save random unitary
+            random_circuits.append(self.circuit)
+            
+            # run random evolution
+            self.state = saved_state
+            for gate in self.circuit:
+                self._randClifford(gate.qubits, gate.params)
+            
+            # measure and save outcome
+            measurements = [self._measure(a) for a in range(self.N)]
+            outcomes.append(measurements)
+        
+        self.state = saved_state
+        self.circuit = saved_circ
+        
+        return [random_circuits, outcomes]
+    
+    def saveShadowsBH(self, N_shadows, N_gates):
+        
+        saved_circ = self.circuit.copy()
+        saved_state = self.state.copy()
+        
+        random_circuits = []
+        outcomes = []
+        
+        for i in range(N_shadows):
+            self.reset_circuit()          
+            # layer of single-site measurements
+            [self.randClifford(a) for a in range(self.N)]
+            # random evolution with single gates
+            self.randEvolutionBH(N_gates)
+            # save random unitary
+            random_circuits.append(self.circuit)
+            
+            # run random evolution
+            self.state = saved_state
+            for gate in self.circuit:
+                self._randClifford(gate.qubits, gate.params)
+            
+            # measure and save outcome
+            measurements = [self._measure(a) for a in range(self.N)]
+            outcomes.append(measurements)
+        
+        self.state = saved_state
+        self.circuit = saved_circ
+        
+        return [random_circuits, outcomes]
+        
     
     
     def plot_histogram(self, counts):

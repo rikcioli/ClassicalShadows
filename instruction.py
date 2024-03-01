@@ -46,8 +46,8 @@ class RandomClifford(Instruction):
     
     rng = random.Random()
     
-    def __init__(self, name, qubits_list, params = None):
-        super().__init__(name, qubits_list)
+    def __init__(self, qubits_list, params = None):
+        super().__init__('random_clifford', qubits_list)
         
         n = len(qubits_list)
         self._num_qubits = n

@@ -126,11 +126,11 @@ def renyi2(N_qubits, depth, N_shadows = 50, N_samples = 1000, save_results = Tru
 
 if __name__ == '__main__':
     
-    N_qubits = 4
+    N_qubits = 6
     N_shadows = 50
     N_samples = 1000
-    min_depth = 1
-    max_depth = 10
+    min_depth = 7
+    max_depth = 14
     save_results = True
     if not save_results:
         warnings.warn("WARNING: save_results set to False")
