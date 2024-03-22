@@ -7,26 +7,36 @@ Created on Tue Jan 16 11:07:13 2024
 
 import numpy as np
 from circuit import StabilizerCircuit
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import tqdm
 from numpy import savetxt
 from multiprocessing import Pool
-import multiprocessing, logging
+import itertools
+import os
 
 from timeit import default_timer as timer
 
 
-def fidelity(N_qubits, depth, N_shadows = 50, N_samples = 1000, save_results = True):
+def fidelity(N_qubits, depth, params, N_shadows = 50, N_samples = 1000, save_results = True):
     
     sc = StabilizerCircuit(N_qubits)
 
     # Prepare arbitrary initial state
-    sc.H(0)
-    [sc.CNOT(i, i+1) for i in range(N_qubits-1)]
+    
+    # CNOT state
+    # sc.H(0)
+    # [sc.CNOT(i, i+1) for i in range(N_qubits-1)]
+    
+    # RandCliff with given params
+    [sc.randClifford([2*i, 2*i+1], params) for i in range(sc.N//2)]
+    [sc.randClifford([2*i+1, (2*i+2)%sc.N], params) for i in range(sc.N//2)]
+    [sc.randClifford([2*i, 2*i+1], params) for i in range(sc.N//2)]
+    
     sc.run()
     phi = sc.state.copy()
+    print(phi)
       
-    print("Running program with "+str(N_qubits)+" qubits, depth "+str(depth), flush=True)
+    print("Running program with "+str(N_qubits)+" qubits, depth "+str(depth))
     print("N_shadows = "+str(N_shadows)+", N_samples =", N_samples)
         
     shadows = sc.saveShadows(N_shadows*N_samples, depth)      
@@ -49,29 +59,64 @@ def fidelity(N_qubits, depth, N_shadows = 50, N_samples = 1000, save_results = T
     err = np.sqrt(np.var(fid_per_sample)/N_samples)
     
     if save_results:
-        savetxt('Results/Fidelity/GHZ All Qubits/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_fidelity_per_sample.csv', fid_per_sample, delimiter=',')
+        savetxt('Results/Fidelity/test/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_fidelity_per_sample.csv', fid_per_sample, delimiter=',')
         #savetxt('Results/Fidelity/4Q 50Sh/'+str(N_qubits)+'Q-'+str(depth)+'D-'+str(N_shadows)+'Sh-'+str(N_samples)+'S_fid_persample_pershadow.csv', np.array(fid_per_sample_per_shadow), delimiter=',')
     
     return [fid, err]
 
 
 if __name__ == '__main__':
+    
+    number_of_cores = 2
+    
+    sc = StabilizerCircuit(2)
+    sc.randClifford([0,1])
+    cliff_params = (675, 3, 3, False, False)
+    print(cliff_params)
 
-    N_qubits = 4
-    min_depth = 1
-    max_depth = 10
+    qubits = range(14, 16, 2)
+    depths = range(1, 3)
+    pairs = list(itertools.product(qubits, depths))
+
+    # Brownian cost
+    costs = [(pair[0]**(3/2))*pair[1]//2 for pair in pairs]
+    # BH cost
+    # costs = [pair[0] + pair[1] for pair in pairs]
+    task_by_cost = sorted(list(zip(costs, pairs)))
+    task_by_cost.reverse()
     
-    # save_results = True
-    # if not save_results:
-    #     print("WARNING: save_results set to False", flush=True)
+    chunksize, extra = divmod(len(task_by_cost), 4 * number_of_cores)
+    if extra:
+        chunksize += 1
     
-    with Pool(4) as pool:
-        results = pool.starmap(fidelity, [(N_qubits, depth) for depth in range(min_depth, max_depth+1)]) 
+    num_groups = len(task_by_cost)//chunksize + bool(len(task_by_cost)%chunksize)
+    groups = [[] for _ in range(num_groups)]
+    total_execution_times = [0]*num_groups
+    max_capacities = [chunksize for _ in range(num_groups-1)]
+    max_capacities += [len(task_by_cost)%chunksize]
+
+    for task in task_by_cost:
+        min_index = total_execution_times.index(min(total_execution_times))
+        groups[min_index].append(task)
+        total_execution_times[min_index] += task[0]
+        if len(groups[min_index]) >= max_capacities[min_index]:
+            total_execution_times[min_index] *= 10000 
     
-    # results = [fidelity(N_qubits, depth, N_samples=1000, save_results=False) for depth in range(min_depth, max_depth+1)]
+    task_list = []
+    for group in groups:
+        task_list += group
+    task_list = [(task[1][0], task[1][1], cliff_params) for task in task_list]
     
-    # results = fidelity(N_qubits, depth=16, N_shadows=50, N_samples=3000, save_results=False)
     
-    print("\n", results)
+    with Pool(number_of_cores) as pool:
+        results = pool.starmap_async(fidelity, task_list) 
+        for value in results.get():
+            print(value)
+    
+    # results = [fidelity(14, depth, cliff_params, N_samples=1000, save_results=False) for depth in range(1,2)]
+        
+    # results = fidelity(6, depth=4, N_shadows=50, N_samples=100, save_results=False)
+        
+    # print("\n", results)
     
     

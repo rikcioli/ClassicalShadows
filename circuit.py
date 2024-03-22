@@ -77,6 +77,16 @@ class StabilizerCircuit(StabilizerState):
         self.state[:, 2*self.N] = vec_r^(xcol_a & zcol_a)
         self.state[:, self.N+a] = xcol_a^zcol_a
         
+    def _Sdg(self, a):
+        if not isinstance(a, int):
+            a = a[0]
+        vec_r = self.state[:, 2*self.N]
+        xcol_a = self.state[:, a]
+        zcol_a = self.state[:, self.N+a]
+        
+        self.state[:, 2*self.N] = vec_r^(xcol_a & (1^zcol_a))
+        self.state[:, self.N+a] = xcol_a^zcol_a
+        
     def _X(self, a):
         if not isinstance(a, int):
             a = a[0]
@@ -84,6 +94,14 @@ class StabilizerCircuit(StabilizerState):
         zcol_a = self.state[:, self.N+a]
         
         self.state[:, 2*self.N] = vec_r^zcol_a
+        
+    def _SWAP(self, pair):
+        a, b = pair[0], pair[1]
+        anew, bnew = self.state[:, b].copy(), self.state[:, a].copy()
+        self.state[:, a], self.state[:, b] = anew, bnew
+        
+        Nanew, Nbnew = self.state[:, self.N+b].copy(), self.state[:, self.N+a].copy()
+        self.state[:, self.N+a], self.state[:, self.N+b] = Nanew, Nbnew
         
         
     @staticmethod
@@ -379,6 +397,12 @@ class StabilizerCircuit(StabilizerState):
             raise RuntimeError("target qubit exceeds N_qubits")
         s = Instruction('S', [a])
         self.circuit.append(s)
+    
+    def Sdg(self, a):
+        if a >= self.N:
+            raise RuntimeError("target qubit exceeds N_qubits")
+        sdg = Instruction('Sdg', [a])
+        self.circuit.append(sdg)
         
     def X(self, a):
         if a >= self.N:
@@ -386,21 +410,31 @@ class StabilizerCircuit(StabilizerState):
         x = Instruction('X', [a])
         self.circuit.append(x)
         
+    def SWAP(self, a, b):
+        if a >= self.N or b>= self.N:
+            raise RuntimeError("target qubits exceed N_qubits")
+        swap = Instruction('SWAP', [a, b])
+        self.circuit.append(swap)
+    
+        
     def measure(self, qubits_list):
         if max(qubits_list) >= self.N:
             raise RuntimeError("target qubits exceed N_qubits")
         meas = Instruction('measure', qubits_list)
         self.circuit.append(meas)
         
-    def randClifford(self, qubits_list):
+    def randClifford(self, qubits_list, params = None):
         if isinstance(qubits_list, int):
             qubits_list = [qubits_list]
         if max(qubits_list) >= self.N:
             raise RuntimeError("target qubits exceed N_qubits")
-        cliff = RandomClifford(qubits_list)
+        cliff = RandomClifford(qubits_list, params = params)
         self.circuit.append(cliff)
         
+        
     def randEvolution(self, depth):
+        if self.N % 2 != 0:
+            raise RuntimeError("Cannot apply Brownian evolution with an odd number of qubits")
         qubits = [i for i in range(self.N)]
         for layer in range(depth):
             self.rng.shuffle(qubits)
@@ -464,6 +498,8 @@ class StabilizerCircuit(StabilizerState):
         Extract classical shadows of the current state (make sure it has 
                                                         already run)
         """
+        if self.N % 2 != 0:
+            raise RuntimeError("Cannot use this classical shadows protocol with an odd number of qubits")
         saved_circ = self.circuit
         saved_state = self.state
         
@@ -519,6 +555,8 @@ class StabilizerCircuit(StabilizerState):
         return [random_circuits, outcomes]
     
     def saveShadowsMixed(self, N_shadows, depth):
+        if self.N % 2 != 0:
+            raise RuntimeError("Cannot use this classical shadows protocol with an odd number of qubits")
         
         saved_circ = self.circuit.copy()
         saved_state = self.state.copy()
@@ -580,7 +618,6 @@ class StabilizerCircuit(StabilizerState):
         
         return [random_circuits, outcomes]
         
-    
     
     def plot_histogram(self, counts):
         sorted_counts = dict(sorted(counts.items()))

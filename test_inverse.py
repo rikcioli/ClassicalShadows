@@ -5,14 +5,9 @@ Created on Tue Jan 16 11:33:22 2024
 @author: rikci
 """
 
-import numpy as np
 from circuit import StabilizerCircuit
-from state import StabilizerState
 import copy
-import matplotlib.pyplot as plt
-import tqdm
-from collections import Counter
-from numpy import savetxt
+
 
 N_qubits = 4
 
