@@ -17,7 +17,7 @@ from sympy.utilities.iterables import multiset_permutations
 N = 4
 d = 2
 p = 1
-depth = 1
+depth = 3
 
 Ip = np.array([d, 0])
 Im = np.array([1, np.sqrt(d**2-1)])
@@ -61,39 +61,38 @@ def Ujk(j, k):
     
     return Ujk
 
-def Wn(n):
-    Wn_list = [d*Im - Ip for _ in range(n)] + [Ip for _ in range(N-n)]
-    Wn = ft.reduce(np.kron, Wn_list)
-    Wn = Wn/(fact(n)*fact(N-n))
-    return Wn
+def sum_Wn(n):
+    region = [1 for _ in range(n)] + [0 for _ in range(N-n)]
+    diff_perm = list(set(it.permutations(region)))
+    Wn_tosum = []
+    for perm in diff_perm:
+        Wn_list = [d*Im - Ip if value else Ip for value in perm]
+        Wn = ft.reduce(np.kron, Wn_list)
+        Wn_tosum.append(Wn)
 
-X = np.array([[0, 1],
-       [1, 0]])
-Id = np.eye(2)
-Z = np.array([[1,0], [0,-1]])
+    return sum(Wn_tosum)
+
+# X = np.array([[0, 1],
+#        [1, 0]])
+# Id = np.eye(2)
+# Z = np.array([[1,0], [0,-1]])
 
 
 L = (1-p)*np.eye(2**N) + p*2*sum((Ujk(j, k) for j in range(N) for k in range(j+1, N)))/(N*(N-1))
 Mt = lambda t: matrix_power(L, t)
 
-Wnt = lambda n, t: np.dot(Wn(n), Mt(t))
+# Wnt = lambda n, t: np.dot(sum_Wn(n), Mt(t))
 
 sigma_x_sigma = (d*Im - Ip)/(d**2-1)
 # insert sigma as if it were a stabilizer, but with an OR between X and Z stabs
 # s.t. location of 1 indicates there's a pauli there (doesn't matter which one)
 pauli_stab = [1, 1, 1, 1]
-# construct all permutations of pauli stab in a smart way
-perm_pauli_stab = list(multiset_permutations(pauli_stab))
-perm_pauli_op = []
-for given_perm in perm_pauli_stab:
-    perm_pauli_op.append([sigma_x_sigma if value else Ip for value in given_perm])
 
-Oa_x_Oa_perm_inv = sum(ft.reduce(np.kron, sigma_list) for sigma_list in perm_pauli_op)
-Oa_x_Oa_t = lambda t: np.dot(Mt(t), Oa_x_Oa_perm_inv)
+Oa_x_Oa_list = [sigma_x_sigma if value else Ip for value in pauli_stab]
+Oa_x_Oa = ft.reduce(np.kron, Oa_x_Oa_list)
+Oa_x_Oa_t = lambda t: np.dot(Mt(t), Oa_x_Oa)
 
-# mult be multiplied by k!(N-k)! where k is the number of 1s in pauli_stab
-k = len(np.where(pauli_stab))
-pi_nt = lambda n, t: (fact(N)/len(perm_pauli_stab))*np.dot(Wn(n), Oa_x_Oa_t(t))*d**(-2*N)
+pi_nt = lambda n, t: np.dot(sum_Wn(n), Oa_x_Oa_t(t))*d**(-2*N)
 
 pi_vec = [pi_nt(n, depth) for n in range(0, N+1)]
 print("ED pi vec =", pi_vec)

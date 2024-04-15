@@ -14,7 +14,7 @@ import math
 import itertools as it
 from sympy.utilities.iterables import multiset_permutations
 
-N = 2
+N = 4
 d = 2
 p = 1
 depth = 1
@@ -61,43 +61,53 @@ def Ujk(j, k):
     
     return Ujk
 
-def Wn(n):
-    Wn_list = [d*Im - Ip for _ in range(n)] + [Ip for _ in range(N-n)]
-    Wn = ft.reduce(np.kron, Wn_list)
-    Wn = Wn/(fact(n)*fact(N-n))
-    return Wn
+def sum_Wn(n):
+    region = [1 for _ in range(n)] + [0 for _ in range(N-n)]
+    diff_perm = list(set(it.permutations(region)))
+    Wn_tosum = []
+    for perm in diff_perm:
+        Wn_list = [d*Im - Ip if value else Ip for value in perm]
+        Wn = ft.reduce(np.kron, Wn_list)
+        Wn_tosum.append(Wn)
 
-X = np.array([[0, 1],
-       [1, 0]])
-Id = np.eye(2)
-Z = np.array([[1,0], [0,-1]])
+    return sum(Wn_tosum)
+
+def multinomial(lst):
+    # Given a list of elements a1, a2, ..., an computes (a1+...+an)!/(a1!a2!...an!)
+    if any(np.array(lst) < 0):
+        return 0
+    res, i = 1, sum(lst)
+    i0 = lst.index(max(lst))
+    for a in lst[:i0] + lst[i0+1:]:
+        for j in range(1,a+1):
+            res *= i
+            res //= j
+            i -= 1
+    return res
+
 
 sites = range(N)
 permutations = list(it.permutations(sites))
 
-L = sum((Ujk(perm[0], perm[1]) for perm in permutations))/fact(N)
+if N == 2:
+    L = sum((Ujk(perm[0], perm[1]) for perm in permutations))/fact(N)
+else:
+    L = sum((np.linalg.multi_dot([Ujk(perm[2*i], perm[2*i+1]) for i in range(N//2)]) for perm in permutations))/fact(N)
 
-# L = sum((np.linalg.multi_dot([Ujk(perm[i], perm[i+1]) for i in range(N//2)]) for perm in permutations))/fact(N)
 Mt = lambda t: matrix_power(L, t)
 
-Wnt = lambda n, t: np.dot(Wn(n), Mt(t))
+# Wnt = lambda n, t: np.dot(sum_Wn(n), Mt(t))
 
 sigma_x_sigma = (d*Im - Ip)/(d**2-1)
 # insert sigma as if it were a stabilizer, but with an OR between X and Z stabs
 # s.t. location of 1 indicates there's a pauli there (doesn't matter which one)
-pauli_stab = [1, 1]
-# construct all permutations of pauli stab in a smart way
-perm_pauli_stab = list(multiset_permutations(pauli_stab))
-perm_pauli_op = []
-for given_perm in perm_pauli_stab:
-    perm_pauli_op.append([sigma_x_sigma if value else Ip for value in given_perm])
+pauli_stab = [0, 1, 1, 1]
 
-Oa_x_Oa_perm_inv = sum(ft.reduce(np.kron, sigma_list) for sigma_list in perm_pauli_op)
-Oa_x_Oa_t = lambda t: np.dot(Mt(t), Oa_x_Oa_perm_inv)
+Oa_x_Oa_list = [sigma_x_sigma if value else Ip for value in pauli_stab]
+Oa_x_Oa = ft.reduce(np.kron, Oa_x_Oa_list)
+Oa_x_Oa_t = lambda t: np.dot(Mt(t), Oa_x_Oa)
 
-# mult be multiplied by k!(N-k)! where k is the number of 1s in pauli_stab
-k = len(np.where(pauli_stab))
-pi_nt = lambda n, t: (fact(N)/len(perm_pauli_stab))*np.dot(Wn(n), Oa_x_Oa_t(t))*d**(-2*N)
+pi_nt = lambda n, t: np.dot(sum_Wn(n), Oa_x_Oa_t(t))*d**(-2*N)
 
 pi_vec = [pi_nt(n, depth) for n in range(0, N+1)]
 print("ED pi vec =", pi_vec)
@@ -110,20 +120,17 @@ initial_condition[len(where_pauli)] = 1
 
 q = d
 if depth > 0:
-    weight_mat2 = np.zeros((N+1, N+1))
-    for i in range(N+1):
-        w = i
-        for j in range(N+1):
-            if i == j:
-                weight_mat2[i, j] = 1 - (2*p/(N*(N-1)))*((q**2-1)/(q**4-1))*((q**2-1)*w*(N-w) + w*(w-1))
-            elif j == i-1:
-                weight_mat2[i, j] = (2*p/(N*(N-1)))*((q**2-1)**2/(q**4-1))*(w-1)*(N-w+1)
-            elif j == i+1:
-                weight_mat2[i, j] = (2*p/(N*(N-1)))*((q**2-1)/(q**4-1))*(w+1)*w
+    brown_mat = np.empty((N+1, N+1))
+    alpha_nm = np.empty((N+1, N+1))
     
+    for n in range(N+1):
+        for m in range(N+1): 
+            alpha_nm[n, m] = (d**(n-m)/math.comb(N, m))*sum((d**(2*n-4*r)*(d**4-1)**(r-n)*multinomial([r, n-2*r, N//2-n+r])*math.comb(n-r, m-n+r) if m-n+r>=0 else 0 for r in range(n//2+1)))
+            brown_mat[n, m] = alpha_nm[n, m]*(d**2-1)**n
+
     if depth > 1:     
-        weight_mat2 = np.linalg.multi_dot([weight_mat2 for i in range(depth)])  
-    final_weights = np.dot(weight_mat2, initial_condition)
+        brown_mat = np.linalg.multi_dot([brown_mat for i in range(depth)])  
+    final_weights = np.dot(brown_mat, initial_condition)
 else:
     final_weights = initial_condition
 
