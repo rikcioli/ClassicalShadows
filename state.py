@@ -197,7 +197,7 @@ class StabilizerState():
         
         
     def dot_zero(self, state = None):
-        # returns overlap with |0> state |<0|\psi>|
+        # returns absolute value of overlap with |0> state |<0|\psi>|
         if state is None:
             state = self.state
         state = self.gauss_elim_stab(state[self.N:])
@@ -212,6 +212,7 @@ class StabilizerState():
                 #print(state, "\n")
                 return 0
         return 2**(-s/2)
+    
     
     def skew_product(self, stab1, stab2):
         return np.dot(stab1[:self.N], stab2[self.N:2*self.N])%2 ^ np.dot(stab1[self.N:2*self.N], stab2[:self.N])%2

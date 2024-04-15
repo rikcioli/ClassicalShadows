@@ -16,6 +16,19 @@ import math
 import matplotlib.pyplot as plt
 import itertools
 
+def multinomial(lst):
+    # Given a list of elements a1, a2, ..., an computes (a1+...+an)!/(a1!a2!...an!)
+    if any(np.array(lst) < 0):
+        return 0
+    res, i = 1, sum(lst)
+    i0 = lst.index(max(lst))
+    for a in lst[:i0] + lst[i0+1:]:
+        for j in range(1,a+1):
+            res *= i
+            res //= j
+            i -= 1
+    return res
+
 
 def compare_expval(N_qubits, depth, N_shadows = 50, N_samples = 1000, save_results = True):
     
@@ -40,32 +53,28 @@ def compare_expval(N_qubits, depth, N_shadows = 50, N_samples = 1000, save_resul
     # Evaluate exact eigenvalues
     N = N_qubits
     p = 1
-    q = 2
+    d = 2
     
     where_pauli = set(np.where(pauli_stab)[0]%N)
-    initial_condition = np.zeros(N)
-    initial_condition[len(where_pauli)-1] = 1
+    initial_condition = np.zeros(N+1)
+    initial_condition[len(where_pauli)] = 1
     
     if depth > 0:
-        weights_matrix = np.zeros((N, N))
-        for i in range(N):
-            w = i+1
-            for j in range(N):
-                if j == i:
-                    weights_matrix[i, i] = 1 - (2*p/(N*(N-1))) * (w*(N-w)*(q**2-1)**2/(q**4-1) + (2*(q**2 -1)/(q**4 -1))*math.comb(w, 2))
-                elif j == i+1:
-                    weights_matrix[i, j] = (2*p/(N*(N-1))) * (2*(q**2-1)/(q**4-1))*math.comb(w+1, 2)
-                elif j == i-1:
-                    weights_matrix[i, j] = (2*p/(N*(N-1))) * ((w-1)*(N-w+1)*(q**2-1)**2/(q**4-1))
+        brown_mat = np.empty((N+1, N+1))
+        alpha_nm = np.empty((N+1, N+1))
         
+        for n in range(N+1):
+            for m in range(N+1): 
+                alpha_nm[n, m] = (d**(n-m)/math.comb(N, m))*sum((d**(2*n-4*r)*(d**4-1)**(r-n)*multinomial([r, n-2*r, N//2-n+r])*math.comb(n-r, m-n+r) if m-n+r>=0 else 0 for r in range(n//2+1)))
+                brown_mat[n, m] = alpha_nm[n, m]*(d**2-1)**n
+
         if depth > 1:     
-            weights_matrix = np.linalg.multi_dot([weights_matrix for i in range(depth)])
-        
-        final_weights = np.dot(weights_matrix, initial_condition)
+            brown_mat = np.linalg.multi_dot([brown_mat for i in range(depth)])  
+        final_weights = np.dot(brown_mat, initial_condition)
     else:
         final_weights = initial_condition
         
-    eigenval = sum((final_weights[w]*(q+1)**(-w-1) for w in range(N)))
+    eigenval = sum((final_weights[w]*(d+1)**(-w) for w in range(1, N+1)))
     expval_ps_exact = np.empty(N_samples)
 
     for sample_number in tqdm.tqdm(range(N_samples)):
@@ -117,7 +126,7 @@ if __name__ == '__main__':
     # qubits = range(4, 18, 2)
     # depths = range(1, 19)
     # pairs = list(itertools.product(qubits, depths))
-    pairs = [(16,10), (16,5), (16,1), (14,6), (14,3), (12,16), (12,15), (12,10), (12,4), (10,2), (8,14), (8,8), (8,2), (6,12), (6,10), (4,18)]
+    pairs = [(14,12)]
     # Brownian cost
     costs = [(pair[0]**(3/2))*pair[1]//2 for pair in pairs]
     # BH cost
@@ -148,10 +157,12 @@ if __name__ == '__main__':
     task_list = [task[1] for task in task_list]
     
     
-    with Pool(4) as pool:
-        results = pool.starmap(compare_expval, task_list)
+    # with Pool(4) as pool:
+        # results = pool.starmap(compare_expval, task_list)
     
-    # results = [compare_expval(N_qubits, depth, pauli_stab, N_shadows, N_samples, save_results=False) for depth in range(min_depth, max_depth+1)]
+    min_depth = 1
+    max_depth = 1
+    results = [compare_expval(4, depth, 50, 100, save_results=False) for depth in range(min_depth, max_depth+1)]
     
     # res_array = np.array(results)
     # depths = [i for i in range(min_depth, max_depth+1)]

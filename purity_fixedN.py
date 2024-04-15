@@ -8,28 +8,31 @@ Created on Wed Jan  3 19:01:28 2024
 import numpy as np
 from circuit import StabilizerCircuit
 import copy
-import matplotlib.pyplot as plt
-import tqdm
-from collections import Counter
+# from collections import Counter
 from numpy import savetxt
 import itertools
 from multiprocessing import Pool
+import time
+import os
 
 
-
-def purity(N_qubits, depth, N_shadows = 50, N_samples = 1000, save_results = True):
+def purity(N_qubits, depth, params, N_shadows = 50, N_samples = 1000, save_results = True):
     
+    start_time = time.time()
+    print("Running program with "+str(N_qubits)+" qubits, depth "+str(depth)+", at time "+str(start_time), flush=True)
+
     sc = StabilizerCircuit(N_qubits)
 
-    # Prepare arbitrary initial state
+    # # Prepare arbitrary initial state
+    #[sc.randClifford([2*i, 2*i+1], params) for i in range(sc.N//2)]
+    #[sc.randClifford([2*i+1, (2*i+2)%sc.N], params) for i in range(sc.N//2)]
+    #[sc.randClifford([2*i, 2*i+1], params) for i in range(sc.N//2)]
+
     sc.H(0)
     [sc.CNOT(i, i+1) for i in range(N_qubits-1)]
+    
     sc.run()
-
-      
-    print("Running program with "+str(N_qubits)+" qubits, depth "+str(depth), flush=True)
-    print("N_shadows = "+str(N_shadows)+", N_samples =", N_samples)
-        
+    
     shadows = sc.saveShadows(N_shadows*N_samples, depth)      
     random_circuits = shadows[0]
     outcomes = shadows[1]
@@ -82,38 +85,51 @@ def purity(N_qubits, depth, N_shadows = 50, N_samples = 1000, save_results = Tru
 
 if __name__ == '__main__':
 
-    qubits = range(4, 18, 2)
-    depths = range(1, 19)
+    number_of_cores = int(os.environ['SLURM_CPUS_PER_TASK'])
+    # number_of_cores = 4
+    print("# CPUs:", number_of_cores)
+
+    # cliff_params = (675, 3, 3, False, False)
+    cliff_params = "GHZ"
+    print(cliff_params)
+
+    qubits = range(32, 42, 2)
+    depths = range(1, 21)
     pairs = list(itertools.product(qubits, depths))
+
     # Brownian cost
     costs = [(pair[0]**(3/2))*pair[1]//2 for pair in pairs]
     # BH cost
     # costs = [pair[0] + pair[1] for pair in pairs]
-    pairs_by_cost = sorted(list(zip(costs, pairs)))
+    task_by_cost = sorted(list(zip(costs, pairs)))
+    task_by_cost.reverse()
     
-    num_groups = 16
+    chunksize, extra = divmod(len(task_by_cost), number_of_cores)
+    if extra:
+        chunksize += 1
+
+    num_groups = len(task_by_cost)//chunksize + bool(len(task_by_cost)%chunksize)
+    print("Chunksize:", chunksize, "\nNumber of groups:", num_groups)
     groups = [[] for _ in range(num_groups)]
     total_execution_times = [0]*num_groups
+    max_capacities = [chunksize for _ in range(num_groups-1)]
+    max_capacities += [len(task_by_cost)%chunksize]
 
-    for task in pairs_by_cost:
+    for task in task_by_cost:
         min_index = total_execution_times.index(min(total_execution_times))
         groups[min_index].append(task)
         total_execution_times[min_index] += task[0]
+        if len(groups[min_index]) >= max_capacities[min_index]:
+            total_execution_times[min_index] *= 10000 
     
     task_list = []
     for group in groups:
         task_list += group
-    task_list = [task[1] for task in task_list]
+    task_list = [(task[1][0], task[1][1], cliff_params) for task in task_list]
+    print(task_list)
 
-    # save_results = True
-    # if not save_results:
-    #     print("WARNING: save_results set to False", flush=True)
-        
-    with Pool(4) as pool:
-        results = pool.starmap(purity, task_list) 
-        
-    # results = [fidelity(N_qubits, depth, N_samples=1000, save_results=False) for depth in range(min_depth, max_depth+1)]
-        
-    # results = fidelity(14, depth=18, N_shadows=50, N_samples=100, save_results=False)
-        
-    print("\n", results)
+
+    with Pool(number_of_cores) as pool:
+        results = pool.starmap_async(purity, task_list) 
+        for value in results.get():
+            print(value)    

@@ -29,7 +29,7 @@ class StabilizerCircuit(StabilizerState):
     
     @property
     def circuit(self):
-        return self._circuit
+        return copy.deepcopy(self._circuit)
     
     @circuit.setter
     def circuit(self, circuit):
@@ -94,6 +94,15 @@ class StabilizerCircuit(StabilizerState):
         zcol_a = self.state[:, self.N+a]
         
         self.state[:, 2*self.N] = vec_r^zcol_a
+    
+    def _Z(self, a):
+        if not isinstance(a, int):
+            a = a[0]
+        vec_r = self.state[:, 2*self.N]
+        xcol_a = self.state[:, a]
+        
+        self.state[:, 2*self.N] = vec_r^xcol_a
+        
         
     def _SWAP(self, pair):
         a, b = pair[0], pair[1]
@@ -196,6 +205,7 @@ class StabilizerCircuit(StabilizerState):
 
     def _Unew(self, qubits_list, matrices, vectors, conj):
         
+        # OLD NON STATIC METHOD
         n = len(qubits_list)  # dim of the subspace on which U is acting non trivially
         if n > self.N:
             raise RuntimeError("Number of given qubits exceeds N")
@@ -384,44 +394,50 @@ class StabilizerCircuit(StabilizerState):
         if a >= self.N or b>= self.N:
             raise RuntimeError("target qubits exceed N_qubits")
         cnot = Instruction('CNOT', [a, b])
-        self.circuit.append(cnot)
+        self._circuit.append(cnot)
     
     def H(self, a):
         if a >= self.N:
             raise RuntimeError("target qubit exceeds N_qubits")
         h = Instruction('H', [a])
-        self.circuit.append(h)
+        self._circuit.append(h)
         
     def S(self, a):
         if a >= self.N:
             raise RuntimeError("target qubit exceeds N_qubits")
         s = Instruction('S', [a])
-        self.circuit.append(s)
+        self._circuit.append(s)
     
     def Sdg(self, a):
         if a >= self.N:
             raise RuntimeError("target qubit exceeds N_qubits")
         sdg = Instruction('Sdg', [a])
-        self.circuit.append(sdg)
+        self._circuit.append(sdg)
         
     def X(self, a):
         if a >= self.N:
             raise RuntimeError("target qubit exceeds N_qubits")
         x = Instruction('X', [a])
-        self.circuit.append(x)
+        self._circuit.append(x)
+    
+    def Z(self, a):
+        if a >= self.N:
+            raise RuntimeError("target qubit exceeds N_qubits")
+        z = Instruction('Z', [a])
+        self._circuit.append(z)
         
     def SWAP(self, a, b):
         if a >= self.N or b>= self.N:
             raise RuntimeError("target qubits exceed N_qubits")
         swap = Instruction('SWAP', [a, b])
-        self.circuit.append(swap)
+        self._circuit.append(swap)
     
         
     def measure(self, qubits_list):
         if max(qubits_list) >= self.N:
             raise RuntimeError("target qubits exceed N_qubits")
         meas = Instruction('measure', qubits_list)
-        self.circuit.append(meas)
+        self._circuit.append(meas)
         
     def randClifford(self, qubits_list, params = None):
         if isinstance(qubits_list, int):
@@ -429,7 +445,7 @@ class StabilizerCircuit(StabilizerState):
         if max(qubits_list) >= self.N:
             raise RuntimeError("target qubits exceed N_qubits")
         cliff = RandomClifford(qubits_list, params = params)
-        self.circuit.append(cliff)
+        self._circuit.append(cliff)
         
         
     def randEvolution(self, depth):
@@ -456,7 +472,7 @@ class StabilizerCircuit(StabilizerState):
         is_measured = False
         for i in range(shots):
             self.state = initial_state.copy()       #n^2 complexity
-            for gate in self.circuit:
+            for gate in self._circuit:
                 if gate.name == 'measure':
                     is_measured = True
                     measurements = [self._measure(a) for a in gate.qubits]
@@ -510,11 +526,11 @@ class StabilizerCircuit(StabilizerState):
             self.reset_circuit()
             self.randEvolution(depth)
             # save random unitary
-            random_circuits.append(self.circuit)
+            random_circuits.append(self._circuit)
             
             # run random evolution
             self.state = saved_state
-            for gate in self.circuit:
+            for gate in self._circuit:
                 self._randClifford(gate.qubits, gate.params)
             
             # measure and save outcome
@@ -522,13 +538,13 @@ class StabilizerCircuit(StabilizerState):
             outcomes.append(measurements)
         
         self.state = saved_state
-        self.circuit = saved_circ
+        self._circuit = saved_circ
         
         return (random_circuits, outcomes)
         
     def saveShadowsGlobal(self, N_shadows):
         
-        saved_circ = self.circuit.copy()
+        saved_circ = self.circuit
         saved_state = self.state.copy()
         
         random_circuits = []
@@ -538,11 +554,11 @@ class StabilizerCircuit(StabilizerState):
             self.reset_circuit()
             self.randClifford([a for a in range(self.N)])
             # save random unitary
-            random_circuits.append(self.circuit)
+            random_circuits.append(self._circuit)
             
             # run random evolution
             self.state = saved_state
-            for gate in self.circuit:
+            for gate in self._circuit:
                 self._randClifford(gate.qubits, gate.params)
             
             # measure and save outcome
@@ -550,7 +566,7 @@ class StabilizerCircuit(StabilizerState):
             outcomes.append(measurements)
         
         self.state = saved_state
-        self.circuit = saved_circ
+        self._circuit = saved_circ
         
         return [random_circuits, outcomes]
     
@@ -558,7 +574,7 @@ class StabilizerCircuit(StabilizerState):
         if self.N % 2 != 0:
             raise RuntimeError("Cannot use this classical shadows protocol with an odd number of qubits")
         
-        saved_circ = self.circuit.copy()
+        saved_circ = self.circuit
         saved_state = self.state.copy()
         
         random_circuits = []
@@ -571,11 +587,11 @@ class StabilizerCircuit(StabilizerState):
             # random evolution
             self.randEvolution(depth)
             # save random unitary
-            random_circuits.append(self.circuit)
+            random_circuits.append(self._circuit)
             
             # run random evolution
             self.state = saved_state
-            for gate in self.circuit:
+            for gate in self._circuit:
                 self._randClifford(gate.qubits, gate.params)
             
             # measure and save outcome
@@ -583,13 +599,13 @@ class StabilizerCircuit(StabilizerState):
             outcomes.append(measurements)
         
         self.state = saved_state
-        self.circuit = saved_circ
+        self._circuit = saved_circ
         
         return [random_circuits, outcomes]
     
     def saveShadowsBH(self, N_shadows, N_gates):
         
-        saved_circ = self.circuit.copy()
+        saved_circ = self.circuit
         saved_state = self.state.copy()
         
         random_circuits = []
@@ -602,11 +618,11 @@ class StabilizerCircuit(StabilizerState):
             # random evolution with single gates
             self.randEvolutionBH(N_gates)
             # save random unitary
-            random_circuits.append(self.circuit)
+            random_circuits.append(self._circuit)
             
             # run random evolution
             self.state = saved_state
-            for gate in self.circuit:
+            for gate in self._circuit:
                 self._randClifford(gate.qubits, gate.params)
             
             # measure and save outcome
@@ -614,7 +630,7 @@ class StabilizerCircuit(StabilizerState):
             outcomes.append(measurements)
         
         self.state = saved_state
-        self.circuit = saved_circ
+        self._circuit = saved_circ
         
         return [random_circuits, outcomes]
         

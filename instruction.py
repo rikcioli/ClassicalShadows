@@ -40,6 +40,9 @@ class Instruction():
             f", qubits={self.qubits!r}"
             ")"
         )
+    
+    def dagger(self):
+        return
 
 
 class RandomClifford(Instruction):
